@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -20,6 +20,8 @@ export interface StepEdgeData extends Record<string, unknown> {
   edge: DesignEdge;
   diagramType: DiagramType;
   dimmed?: boolean;
+  sourcePortOffset?: number;
+  targetPortOffset?: number;
   manualWaypoints?: Point[];
   autoWaypoints?: Point[];
   curveOffset?: Point;
@@ -27,6 +29,14 @@ export interface StepEdgeData extends Record<string, unknown> {
 }
 
 export type StepFlowEdge = Edge<StepEdgeData, "step">;
+
+function shiftPort(pt: Point, position: Position, offset: number): Point {
+  if (!offset) return pt;
+  if (position === Position.Left || position === Position.Right) {
+    return { x: pt.x, y: pt.y + offset };
+  }
+  return { x: pt.x + offset, y: pt.y };
+}
 
 function buildRoundedPolylinePath(points: Point[], radius = 12): string {
   if (points.length < 2) return "";
@@ -239,28 +249,43 @@ export function StepEdge({
         designEdge?.relation_kind,
     );
 
+  const srcPt = shiftPort(
+    { x: sourceX, y: sourceY },
+    sourcePosition,
+    data?.sourcePortOffset ?? 0,
+  );
+  const tgtPt = shiftPort(
+    { x: targetX, y: targetY },
+    targetPosition,
+    data?.targetPortOffset ?? 0,
+  );
+  const sx = srcPt.x;
+  const sy = srcPt.y;
+  const tx = tgtPt.x;
+  const ty = tgtPt.y;
+
   const savedManual = data?.manualWaypoints ?? [];
+  const savedKey = JSON.stringify(savedManual);
   const [dragWaypoints, setDragWaypoints] = useState<Point[] | null>(null);
+  const draggingRef = useRef(false);
 
   useEffect(() => {
-    setDragWaypoints(null);
-  }, [savedManual]);
+    if (!draggingRef.current) {
+      setDragWaypoints(null);
+    }
+  }, [savedKey]);
 
   const activeManual = dragWaypoints ?? savedManual;
   const autoWaypoints = data?.autoWaypoints ?? [];
   const curveOffset = data?.curveOffset ?? { x: 0, y: 0 };
 
   let edgePath = "";
-  let labelX = (sourceX + targetX) / 2;
-  let labelY = (sourceY + targetY) / 2;
+  let labelX = (sx + tx) / 2;
+  let labelY = (sy + ty) / 2;
   let bendKnob: Point = { x: labelX, y: labelY };
 
   if (activeManual.length > 0) {
-    const pts = [
-      { x: sourceX, y: sourceY },
-      ...activeManual,
-      { x: targetX, y: targetY },
-    ];
+    const pts = [{ x: sx, y: sy }, ...activeManual, { x: tx, y: ty }];
     edgePath = buildRoundedPolylinePath(pts, 12);
     const midIdx = Math.floor(activeManual.length / 2);
     const wp = activeManual[midIdx]!;
@@ -268,11 +293,7 @@ export function StepEdge({
     labelY = wp.y;
     bendKnob = wp;
   } else if (autoWaypoints.length > 0) {
-    const pts = [
-      { x: sourceX, y: sourceY },
-      ...autoWaypoints,
-      { x: targetX, y: targetY },
-    ];
+    const pts = [{ x: sx, y: sy }, ...autoWaypoints, { x: tx, y: ty }];
     edgePath = buildRoundedPolylinePath(pts, 14);
     if (autoWaypoints.length >= 2) {
       const a = autoWaypoints[0]!;
@@ -285,19 +306,19 @@ export function StepEdge({
     }
     bendKnob = { x: labelX, y: labelY };
   } else if (curveOffset.x !== 0 || curveOffset.y !== 0) {
-    const cx = (sourceX + targetX) / 2 + curveOffset.x;
-    const cy = (sourceY + targetY) / 2 + curveOffset.y;
-    edgePath = `M ${sourceX} ${sourceY} Q ${cx} ${cy} ${targetX} ${targetY}`;
-    labelX = 0.25 * sourceX + 0.5 * cx + 0.25 * targetX;
-    labelY = 0.25 * sourceY + 0.5 * cy + 0.25 * targetY;
+    const cx = (sx + tx) / 2 + curveOffset.x;
+    const cy = (sy + ty) / 2 + curveOffset.y;
+    edgePath = `M ${sx} ${sy} Q ${cx} ${cy} ${tx} ${ty}`;
+    labelX = 0.25 * sx + 0.5 * cx + 0.25 * tx;
+    labelY = 0.25 * sy + 0.5 * cy + 0.25 * ty;
     bendKnob = { x: labelX, y: labelY };
   } else {
     const [path, lx, ly] = getSmoothStepPath({
-      sourceX,
-      sourceY,
+      sourceX: sx,
+      sourceY: sy,
       sourcePosition,
-      targetX,
-      targetY,
+      targetX: tx,
+      targetY: ty,
       targetPosition,
       borderRadius: 12,
     });
@@ -313,9 +334,12 @@ export function StepEdge({
   ) => {
     e.stopPropagation();
     e.preventDefault();
+    draggingRef.current = true;
 
     const initialList =
-      waypointIdx === "new" ? [{ x: bendKnob.x, y: bendKnob.y }] : [...activeManual];
+      waypointIdx === "new"
+        ? [{ x: Math.round(bendKnob.x), y: Math.round(bendKnob.y) }]
+        : [...activeManual];
     const targetIdx = waypointIdx === "new" ? 0 : waypointIdx;
     let latest = initialList;
 
@@ -333,13 +357,16 @@ export function StepEdge({
     };
 
     const onUp = () => {
+      draggingRef.current = false;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       data?.onCommitWaypoints?.(id, latest);
     };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   const strokeColor = selected
@@ -353,7 +380,6 @@ export function StepEdge({
   const tgtCard = designEdge?.target_cardinality;
   const relKind = designEdge?.relation_kind ?? "association";
 
-  // Barker half-dashed / half-solid rendering for ER relationships
   const srcOpt = isOptionalCardinality(srcCard);
   const tgtOpt = isOptionalCardinality(tgtCard);
   const srcMand = isMandatoryCardinality(srcCard);
@@ -367,8 +393,7 @@ export function StepEdge({
     (isEr && relKind === "association" && srcOpt && tgtOpt && !useSplitDash);
 
   const labelText =
-    designEdge?.label?.trim() ||
-    (relKind === "subtype" ? "is-a" : "");
+    designEdge?.label?.trim() || (relKind === "subtype" ? "is-a" : "");
   const hasLabel =
     Boolean(labelText) ||
     designEdge?.step !== undefined ||
@@ -378,12 +403,11 @@ export function StepEdge({
 
   return (
     <>
-      {/* Invisible wide hit-area so clicking/right-clicking edges is effortless */}
       <path
         d={edgePath}
         fill="none"
         stroke="transparent"
-        strokeWidth={18}
+        strokeWidth={20}
         className="react-flow__edge-interaction"
       />
 
@@ -392,19 +416,23 @@ export function StepEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeDasharray="6 4"
             className="react-flow__edge-path"
+            style={{
+              stroke: strokeColor,
+              strokeWidth,
+              strokeDasharray: "6 4",
+            }}
           />
           <path
             d={edgePath}
             fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
             pathLength={100}
-            strokeDasharray="50 100"
-            strokeDashoffset={srcMand ? 0 : -50}
+            style={{
+              stroke: strokeColor,
+              strokeWidth,
+              strokeDasharray: "50 100",
+              strokeDashoffset: srcMand ? 0 : -50,
+            }}
             pointerEvents="none"
           />
         </g>
@@ -426,7 +454,7 @@ export function StepEdge({
       {isEr && relKind === "subtype" && (
         <g style={{ opacity }}>
           <SubtypeTriangle
-            anchor={{ x: targetX, y: targetY }}
+            anchor={{ x: tx, y: ty }}
             outward={getHandleOutwardVector(targetPosition)}
             color={strokeColor}
             strokeWidth={strokeWidth}
@@ -437,7 +465,7 @@ export function StepEdge({
         <g style={{ opacity }}>
           {srcCard && (
             <CrowsFootEnd
-              anchor={{ x: sourceX, y: sourceY }}
+              anchor={{ x: sx, y: sy }}
               outward={getHandleOutwardVector(sourcePosition)}
               cardinality={srcCard}
               color={strokeColor}
@@ -446,7 +474,7 @@ export function StepEdge({
           )}
           {tgtCard && (
             <CrowsFootEnd
-              anchor={{ x: targetX, y: targetY }}
+              anchor={{ x: tx, y: ty }}
               outward={getHandleOutwardVector(targetPosition)}
               cardinality={tgtCard}
               color={strokeColor}
@@ -456,58 +484,15 @@ export function StepEdge({
         </g>
       )}
 
-      {/* Draggable waypoint dots when selected */}
-      {selected && activeManual.length > 0 && (
-        <g>
-          {activeManual.map((pt, idx) => (
-            <circle
-              key={`wp-${idx}`}
-              cx={pt.x}
-              cy={pt.y}
-              r={6}
-              fill="#38bdf8"
-              stroke="#020617"
-              strokeWidth={2}
-              className="nodrag nopan cursor-grab active:cursor-grabbing"
-              onPointerDown={(e) => startWaypointDrag(e, idx)}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                const next = activeManual.filter((_, i) => i !== idx);
-                setDragWaypoints(next);
-                data?.onCommitWaypoints?.(id, next);
-              }}
-            >
-              <title>Drag to move bend point • Double-click to remove</title>
-            </circle>
-          ))}
-        </g>
-      )}
-
-      {/* Draggable midpoint bend handle when selected and no manual waypoints exist yet */}
-      {selected && activeManual.length === 0 && (
-        <g>
-          <circle
-            cx={bendKnob.x}
-            cy={hasLabel ? bendKnob.y + 18 : bendKnob.y}
-            r={6}
-            fill="#0f172a"
-            stroke="#38bdf8"
-            strokeWidth={2}
-            className="nodrag nopan cursor-grab active:cursor-grabbing"
-            onPointerDown={(e) => startWaypointDrag(e, "new")}
-          >
-            <title>Drag to manually bend this line</title>
-          </circle>
-        </g>
-      )}
-
-      {hasLabel && (
-        <EdgeLabelRenderer>
+      {/* HTML layer for labels AND reliable draggable bend handles */}
+      <EdgeLabelRenderer>
+        {hasLabel && (
           <div
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: "all",
+              zIndex: selected ? 40 : 10,
             }}
             className={`nodrag nopan inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] shadow-md transition-opacity ${
               selected
@@ -527,8 +512,46 @@ export function StepEdge({
               <Lock className="h-2.5 w-2.5 text-amber-400" />
             )}
           </div>
-        </EdgeLabelRenderer>
-      )}
+        )}
+
+        {selected &&
+          activeManual.map((pt, idx) => (
+            <div
+              key={`wp-${idx}`}
+              style={{
+                position: "absolute",
+                transform: `translate(-50%, -50%) translate(${pt.x}px,${pt.y}px)`,
+                pointerEvents: "all",
+                zIndex: 50,
+              }}
+              title="Drag to move bend point • Double-click to remove"
+              className="nodrag nopan h-3.5 w-3.5 rounded-full border-2 border-slate-950 bg-sky-400 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => startWaypointDrag(e, idx)}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                const next = activeManual.filter((_, i) => i !== idx);
+                setDragWaypoints(next);
+                data?.onCommitWaypoints?.(id, next);
+              }}
+            />
+          ))}
+
+        {selected && activeManual.length === 0 && (
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${bendKnob.x}px,${hasLabel ? bendKnob.y + 20 : bendKnob.y}px)`,
+              pointerEvents: "all",
+              zIndex: 50,
+            }}
+            title="Drag to manually bend this line"
+            className="nodrag nopan h-3.5 w-3.5 rounded-full border-2 border-sky-400 bg-slate-950 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => startWaypointDrag(e, "new")}
+          />
+        )}
+      </EdgeLabelRenderer>
     </>
   );
 }

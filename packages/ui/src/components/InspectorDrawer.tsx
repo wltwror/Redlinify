@@ -505,6 +505,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
   const [edgeDraft, setEdgeDraft] = useState<DesignEdge | null>(selectedEdge);
   const [crossLinks, setCrossLinks] = useState<CrossLinkOccurrence[]>([]);
   const [loadingLinks, setLoadingLinks] = useState(false);
+  const [showAdrGuide, setShowAdrGuide] = useState(false);
 
   useEffect(() => {
     setNodeDraft(selectedNode ? structuredClone(selectedNode) : null);
@@ -625,8 +626,15 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
       lines.push(`- View \`${vd.view_id}\`: ${parts.join(", ") || "updated"}`);
     }
     if (pendingFeedback.pending_threads.length > 0) {
+      const locs = pendingFeedback.pending_threads
+        .map((t) =>
+          t.view_id
+            ? `${t.view_id}${t.target_id ? `/${t.target_id}` : ""}`
+            : "workspace",
+        )
+        .join(", ");
       lines.push(
-        `- Open threads needing agent response: ${pendingFeedback.pending_threads.length}`,
+        `- Open threads needing agent response: ${pendingFeedback.pending_threads.length} (${locs})`,
       );
     }
     if (pendingFeedback.view_requests.length > 0) {
@@ -1947,25 +1955,43 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
           {/* WORKSPACE TRIAGE: ADRs & VIEW/WORKSPACE THREADS */}
           {mode === "workspace" && workspaceTab === "adrs" && (
             <div className="space-y-4">
-              <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 space-y-1.5 text-[11px] text-slate-300 leading-relaxed">
-                <div className="font-semibold text-slate-100 flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                  How Threads &amp; ADRs Work
-                </div>
-                <p>
-                  • <strong className="text-amber-300">Question:</strong> asks
-                  for clarification before locking a design.
-                </p>
-                <p>
-                  • <strong className="text-sky-300">Change Request:</strong>{" "}
-                  requests the agent to modify a box/edge/view.
-                </p>
-                <p>
-                  • <strong className="text-emerald-300">Decision (ADR):</strong>{" "}
-                  resolved threads graduate into persistent{" "}
-                  <strong>Architecture Decision Records</strong> so future agent
-                  iterations remember <em>why</em> choices were made.
-                </p>
+              <div className="rounded-lg border border-slate-800 bg-slate-950/70">
+                <button
+                  type="button"
+                  onClick={() => setShowAdrGuide((v) => !v)}
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-[11px] font-semibold text-slate-200 hover:bg-slate-900/70 rounded-lg"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    How Threads &amp; ADRs Work
+                  </span>
+                  {showAdrGuide ? (
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                  )}
+                </button>
+                {showAdrGuide && (
+                  <div className="border-t border-slate-800 px-3 py-2.5 space-y-1.5 text-[11px] text-slate-300 leading-relaxed">
+                    <p>
+                      • <strong className="text-amber-300">Question:</strong>{" "}
+                      asks for clarification before locking a design.
+                    </p>
+                    <p>
+                      • <strong className="text-sky-300">Change Request:</strong>{" "}
+                      requests the agent to modify a box/edge/view.
+                    </p>
+                    <p>
+                      •{" "}
+                      <strong className="text-emerald-300">
+                        Decision (ADR):
+                      </strong>{" "}
+                      resolved threads graduate into persistent{" "}
+                      <strong>Architecture Decision Records</strong> so future
+                      agent iterations remember <em>why</em> choices were made.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

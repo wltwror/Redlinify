@@ -29,3 +29,8 @@ Use Redlinify whenever designing, refactoring, or clarifying non-trivial softwar
 1. Before implementing a module, call `get_view` and `get_node_history` on its `entity_ref` to respect prior decisions and rejected alternatives.
 2. After implementing code, call `sync_code_refs` to link `path:symbol` references and transition nodes to `"implemented"`.
 3. If real implementation constraints force an architectural deviation, mark the affected node `"drifted"` via `sync_code_refs` and post a `drift_alert` thread via `post_thread_message` explaining why.
+
+## 5. ER Diagrams & Database Schema Translation
+* When modeling database schemas, set `diagram_type: "er"` on the `DesignView`, `kind: "Entity"` on tables, and define columns in `node.fields` (`name`, `type`, `pk`, `fk`, `unique`, `nullable`, `indexed`, `default_value`, `note`).
+* Define relationships using `source_cardinality` / `target_cardinality` (`"1"`, `"0..1"`, `"1..*"`, `"0..*"`) and `relation_kind` (`"association"`, `"identifying"`, `"subtype"`).
+* When translating an ER diagram into SQL/ORM models, combine `node.fields` + `edges` + `get_node_history` ADRs; if on-delete rules or composite constraints aren't explicitly noted yet, ask in a node/edge `question` thread or check existing ADRs first.

@@ -6,7 +6,6 @@ import {
   Redo2,
   Sparkles,
   Undo2,
-  Wifi,
   WifiOff,
 } from "lucide-react";
 import type { DiagramType, ViewDirection } from "@redlinify/shared/browser";
@@ -35,7 +34,7 @@ interface TriageBarProps {
   pendingAgentCount: number;
   onOpenQuestions: () => void;
   onOpenPendingReview: () => void;
-  wsConnected: boolean;
+  showOfflineWarning: boolean;
 }
 
 const FILTER_ITEMS: Array<{ id: TriageFilter; label: string }> = [
@@ -63,7 +62,7 @@ export function TriageBar({
   pendingAgentCount,
   onOpenQuestions,
   onOpenPendingReview,
-  wsConnected,
+  showOfflineWarning,
 }: TriageBarProps) {
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
@@ -178,27 +177,15 @@ export function TriageBar({
           </span>
         </button>
 
-        <span
-          title={
-            wsConnected
-              ? "WebSocket live sync connected"
-              : "Reconnecting to live sync..."
-          }
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border ${
-            wsConnected
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-              : "border-amber-500/30 bg-amber-500/10 text-amber-300"
-          }`}
-        >
-          {wsConnected ? (
-            <Wifi className="h-2.5 w-2.5" />
-          ) : (
+        {showOfflineWarning && (
+          <span
+            title="Live file sync disconnected — reconnecting automatically..."
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border border-amber-500/40 bg-amber-500/15 text-amber-200"
+          >
             <WifiOff className="h-2.5 w-2.5" />
-          )}
-          <span className="hidden md:inline">
-            {wsConnected ? "Live" : "Syncing"}
+            <span>Offline — reconnecting</span>
           </span>
-        </span>
+        )}
       </div>
     </div>
   );

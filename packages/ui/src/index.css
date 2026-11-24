@@ -59,3 +59,14 @@ body,
 .redlinify-pulse-ring {
   animation: redlinify-pulse 0.9s ease-in-out 3;
 }
+
+.redlinify-handle {
+  cursor: crosshair !important;
+}
+
+.redlinify-handle::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 9999px;
+}

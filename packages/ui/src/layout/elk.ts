@@ -90,14 +90,16 @@ export async function computeAutoLayout(
     targets: [edge.target],
   }));
 
+  const isEr = view.diagram_type === "er";
   const laidOut = await elk.layout({
     id: view.id,
     layoutOptions: {
       "elk.algorithm": "layered",
       "elk.direction": view.direction === "LR" ? "RIGHT" : "DOWN",
-      "elk.spacing.nodeNode": "68",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "148",
-      "elk.spacing.edgeNode": "44",
+      "elk.spacing.nodeNode": isEr ? "90" : "72",
+      "elk.layered.spacing.nodeNodeBetweenLayers": isEr ? "195" : "156",
+      "elk.spacing.edgeNode": isEr ? "56" : "48",
+      "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
       "elk.layered.nodePlacement.strategy": "SIMPLE",
       "elk.padding": "[top=24,left=24,bottom=24,right=24]",
     },

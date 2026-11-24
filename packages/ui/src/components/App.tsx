@@ -122,10 +122,14 @@ function WorkbenchInner() {
     useState<WorkspaceDrawerTab>("questions");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [wsEverConnected, setWsEverConnected] = useState(false);
+  const [wsGraceExpired, setWsGraceExpired] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [conflictBanner, setConflictBanner] = useState(false);
   const [layoutVersion, setLayoutVersion] = useState(0);
@@ -134,17 +138,25 @@ function WorkbenchInner() {
 
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
+  const dragOriginRef = useRef<{
+    nodePositions: Record<string, Point>;
+    edgeRoutes: Record<string, EdgeRoute>;
+  } | null>(null);
   const undoMapRef = useRef<Map<string, DesignView[]>>(new Map());
   const redoMapRef = useRef<Map<string, DesignView[]>>(new Map());
   const viewportReadyRef = useRef(false);
   const activeViewIdRef = useRef<string | null>(null);
   const activeViewRef = useRef<DesignView | null>(null);
   const viewHashRef = useRef<string | undefined>(undefined);
+  const selectedNodeIdsRef = useRef<string[]>([]);
+  const selectedEdgeIdsRef = useRef<string[]>([]);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   activeViewIdRef.current = activeViewId;
   activeViewRef.current = activeView;
   viewHashRef.current = viewHash;
+  selectedNodeIdsRef.current = selectedNodeIds;
+  selectedEdgeIdsRef.current = selectedEdgeIds;
 
   const showToast = useCallback(
     (message: string, tone: "info" | "warning" | "error" = "info") => {
@@ -254,6 +266,7 @@ function WorkbenchInner() {
 
   // WebSocket live updates
   useEffect(() => {
+    const graceTimer = setTimeout(() => setWsGraceExpired(true), 2000);
     const disconnect = connectWebSocket(
       (event) => {
         void (async () => {
@@ -291,9 +304,15 @@ function WorkbenchInner() {
           }
         })();
       },
-      setWsConnected,
+      (connected) => {
+        setWsConnected(connected);
+        if (connected) setWsEverConnected(true);
+      },
     );
-    return disconnect;
+    return () => {
+      clearTimeout(graceTimer);
+      disconnect();
+    };
   }, [loadWorkspaceMeta, loadViewDetail, showToast]);
 
   const persistView = useCallback(
@@ -636,7 +655,7 @@ function WorkbenchInner() {
         id: node.id,
         type: "structured",
         position: positionsRef.current[node.id] ?? { x: 40, y: 40 },
-        selected: selectedNodeId === node.id,
+        selected: selectedNodeIdsRef.current.includes(node.id),
         data: {
           node,
           diagramType: activeView.diagram_type ?? "general",
@@ -674,6 +693,7 @@ function WorkbenchInner() {
     layoutVersion,
     pulsingNodeId,
     selectedNodeId,
+    selectedNodeIds,
     setRfNodes,
   ]);
 
@@ -711,6 +731,7 @@ function WorkbenchInner() {
     const nextEdges: StepFlowEdge[] = activeView.edges.map((edge) => {
       const route = routing[edge.id];
       const diagramType = activeView.diagram_type ?? "general";
+      const isSelected = selectedEdgeIdsRef.current.includes(edge.id);
       return {
         id: edge.id,
         source: edge.source,
@@ -718,19 +739,22 @@ function WorkbenchInner() {
         sourceHandle: route?.sourceHandle ?? "right",
         targetHandle: route?.targetHandle ?? "left",
         type: "step",
-        selected: selectedEdgeId === edge.id,
+        selected: isSelected,
+        zIndex: isSelected ? 1000 : 1,
         markerEnd:
           diagramType === "er"
             ? undefined
             : {
                 type: MarkerType.ArrowClosed,
-                color: selectedEdgeId === edge.id ? "#38bdf8" : "#64748b",
+                color: isSelected ? "#38bdf8" : "#64748b",
               },
         data: {
           edge,
           diagramType,
           dimmed:
             dimmedNodeIds.has(edge.source) && dimmedNodeIds.has(edge.target),
+          sourcePortOffset: route?.sourcePortOffset ?? 0,
+          targetPortOffset: route?.targetPortOffset ?? 0,
           manualWaypoints: route?.manualWaypoints ?? [],
           autoWaypoints: route?.autoWaypoints ?? [],
           curveOffset: route?.curveOffset ?? { x: 0, y: 0 },
@@ -749,6 +773,7 @@ function WorkbenchInner() {
     layoutVersion,
     routingTick,
     selectedEdgeId,
+    selectedEdgeIds,
     setRfEdges,
   ]);
 
@@ -757,6 +782,8 @@ function WorkbenchInner() {
       setActiveViewId(viewId);
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
+      setSelectedNodeIds([]);
+      setSelectedEdgeIds([]);
       setContextMenu(null);
       if (drawerMode === "node" || drawerMode === "edge") {
         setDrawerMode("none");
@@ -783,6 +810,8 @@ function WorkbenchInner() {
       if (targetType === "node" && targetId) {
         setSelectedNodeId(targetId);
         setSelectedEdgeId(null);
+        setSelectedNodeIds([targetId]);
+        setSelectedEdgeIds([]);
         setDrawerMode("node");
         setElementTab(preferredTab ?? "links");
         setPulsingNodeId(targetId);
@@ -896,6 +925,65 @@ function WorkbenchInner() {
     await loadViewDetail(activeView.id, { forceResetLayout: true });
   }, [activeView, loadViewDetail, persistView]);
 
+  const snapshotDragOrigin = useCallback(() => {
+    dragOriginRef.current = {
+      nodePositions: structuredClone(positionsRef.current),
+      edgeRoutes: structuredClone(edgeRoutesRef.current),
+    };
+  }, []);
+
+  const applyAutoMoveWaypoints = useCallback(() => {
+    const origin = dragOriginRef.current;
+    const view = activeViewRef.current;
+    if (!origin || !view) return;
+
+    for (const edge of view.edges) {
+      const origRoute = origin.edgeRoutes[edge.id];
+      const origWps = origRoute?.waypoints;
+      if (!origWps || origWps.length === 0) continue;
+
+      const srcOrig = origin.nodePositions[edge.source];
+      const srcCurr = positionsRef.current[edge.source];
+      const tgtOrig = origin.nodePositions[edge.target];
+      const tgtCurr = positionsRef.current[edge.target];
+      if (!srcOrig || !srcCurr || !tgtOrig || !tgtCurr) continue;
+
+      const srcDx = srcCurr.x - srcOrig.x;
+      const srcDy = srcCurr.y - srcOrig.y;
+      const tgtDx = tgtCurr.x - tgtOrig.x;
+      const tgtDy = tgtCurr.y - tgtOrig.y;
+
+      const srcMoved = Math.abs(srcDx) > 0 || Math.abs(srcDy) > 0;
+      const tgtMoved = Math.abs(tgtDx) > 0 || Math.abs(tgtDy) > 0;
+      if (!srcMoved && !tgtMoved) continue;
+
+      const m = origWps.length;
+      const nextWps = origWps.map((pt, i) => {
+        if (srcMoved && tgtMoved) {
+          return {
+            x: Math.round(pt.x + (srcDx + tgtDx) / 2),
+            y: Math.round(pt.y + (srcDy + tgtDy) / 2),
+          };
+        }
+        const weight = srcMoved ? (m - i) / (m + 1) : (i + 1) / (m + 1);
+        const dx = srcMoved ? srcDx : tgtDx;
+        const dy = srcMoved ? srcDy : tgtDy;
+        return {
+          x: Math.round(pt.x + dx * weight),
+          y: Math.round(pt.y + dy * weight),
+        };
+      });
+
+      edgeRoutesRef.current = {
+        ...edgeRoutesRef.current,
+        [edge.id]: {
+          ...(edgeRoutesRef.current[edge.id] ?? origRoute),
+          waypoints: nextWps,
+        },
+      };
+    }
+  }, []);
+
   const handleNodesChange = useCallback(
     (changes: NodeChange<StructuredFlowNode>[]) => {
       onNodesChange(changes);
@@ -910,26 +998,43 @@ function WorkbenchInner() {
         }
       }
       if (moved) {
+        applyAutoMoveWaypoints();
         setRoutingTick((t) => t + 1);
       }
     },
-    [onNodesChange],
+    [applyAutoMoveWaypoints, onNodesChange],
   );
 
-  const handleNodeDragStop = useCallback(
-    (_event: unknown, draggedNode: StructuredFlowNode) => {
+  const finalizeDraggedNodes = useCallback(
+    (draggedNodes: StructuredFlowNode[]) => {
       if (!activeView) return;
-      positionsRef.current = {
-        ...positionsRef.current,
-        [draggedNode.id]: {
-          x: Math.round(draggedNode.position.x),
-          y: Math.round(draggedNode.position.y),
-        },
-      };
+      const nextPos = { ...positionsRef.current };
+      for (const n of draggedNodes) {
+        nextPos[n.id] = {
+          x: Math.round(n.position.x),
+          y: Math.round(n.position.y),
+        };
+      }
+      positionsRef.current = nextPos;
+      applyAutoMoveWaypoints();
+      dragOriginRef.current = null;
       setRoutingTick((t) => t + 1);
       void persistCurrentLayout(activeView.id);
     },
-    [activeView, persistCurrentLayout],
+    [activeView, applyAutoMoveWaypoints, persistCurrentLayout],
+  );
+
+  const handleNodeDragStop = useCallback(
+    (
+      _event: unknown,
+      draggedNode: StructuredFlowNode,
+      allDragged?: StructuredFlowNode[],
+    ) => {
+      finalizeDraggedNodes(
+        allDragged && allDragged.length > 0 ? allDragged : [draggedNode],
+      );
+    },
+    [finalizeDraggedNodes],
   );
 
   const handleMoveEnd = useCallback(
@@ -1551,7 +1656,7 @@ function WorkbenchInner() {
           setDrawerMode("workspace");
           setWorkspaceTab("pending");
         }}
-        wsConnected={wsConnected}
+        showOfflineWarning={!wsConnected && (wsEverConnected || wsGraceExpired)}
       />
 
       {conflictBanner && activeView && (
@@ -1596,9 +1701,37 @@ function WorkbenchInner() {
               edgeTypes={edgeTypes}
               connectionMode={ConnectionMode.Loose}
               edgesReconnectable
+              multiSelectionKeyCode={["Control", "Meta"]}
+              selectionKeyCode="Shift"
               onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
+              onNodeDragStart={snapshotDragOrigin}
               onNodeDragStop={handleNodeDragStop}
+              onSelectionDragStart={snapshotDragOrigin}
+              onSelectionDragStop={(_evt, nodes) => finalizeDraggedNodes(nodes)}
+              onSelectionChange={({ nodes, edges }) => {
+                const nextNodeIds = nodes.map((n) => n.id);
+                const nextEdgeIds = edges.map((e) => e.id);
+                const sameNodes =
+                  nextNodeIds.length === selectedNodeIdsRef.current.length &&
+                  nextNodeIds.every((id, i) => id === selectedNodeIdsRef.current[i]);
+                const sameEdges =
+                  nextEdgeIds.length === selectedEdgeIdsRef.current.length &&
+                  nextEdgeIds.every((id, i) => id === selectedEdgeIdsRef.current[i]);
+                if (!sameNodes) setSelectedNodeIds(nextNodeIds);
+                if (!sameEdges) setSelectedEdgeIds(nextEdgeIds);
+                if (nextNodeIds.length > 1) {
+                  setSelectedNodeId(null);
+                  setSelectedEdgeId(null);
+                  setDrawerMode((curr) => (curr === "node" || curr === "edge" ? "none" : curr));
+                } else if (nextNodeIds.length === 1 && nextEdgeIds.length === 0) {
+                  setSelectedNodeId(nextNodeIds[0]!);
+                  setSelectedEdgeId(null);
+                } else if (nextEdgeIds.length === 1 && nextNodeIds.length === 0) {
+                  setSelectedEdgeId(nextEdgeIds[0]!);
+                  setSelectedNodeId(null);
+                }
+              }}
               onMoveEnd={handleMoveEnd}
               onReconnect={(oldEdge, newConn) =>
                 void handleReconnect(oldEdge, newConn)
@@ -1609,16 +1742,22 @@ function WorkbenchInner() {
                   setPendingConn(conn);
                 }
               }}
-              onNodeClick={(_e, node) => {
+              onNodeClick={(e, node) => {
                 setContextMenu(null);
+                if (e.ctrlKey || e.metaKey || e.shiftKey) return;
                 setSelectedNodeId(node.id);
                 setSelectedEdgeId(null);
+                setSelectedNodeIds([node.id]);
+                setSelectedEdgeIds([]);
                 setDrawerMode("node");
               }}
-              onEdgeClick={(_e, edge) => {
+              onEdgeClick={(e, edge) => {
                 setContextMenu(null);
+                if (e.ctrlKey || e.metaKey || e.shiftKey) return;
                 setSelectedEdgeId(edge.id);
                 setSelectedNodeId(null);
+                setSelectedEdgeIds([edge.id]);
+                setSelectedNodeIds([]);
                 setDrawerMode("edge");
                 if (elementTab === "links") setElementTab("spec");
               }}
@@ -1626,6 +1765,8 @@ function WorkbenchInner() {
                 setContextMenu(null);
                 setSelectedNodeId(null);
                 setSelectedEdgeId(null);
+                setSelectedNodeIds([]);
+                setSelectedEdgeIds([]);
                 if (drawerMode === "node" || drawerMode === "edge") {
                   setDrawerMode("none");
                 }
@@ -1691,6 +1832,12 @@ function WorkbenchInner() {
                 maskColor="rgba(2, 6, 23, 0.75)"
               />
             </ReactFlow>
+          )}
+
+          {selectedNodeIds.length > 1 && (
+            <div className="pointer-events-none absolute bottom-4 left-14 z-30 rounded-lg border border-sky-500/40 bg-slate-900/90 px-3 py-1.5 text-[11px] text-sky-200 shadow-lg backdrop-blur-sm">
+              {selectedNodeIds.length} boxes selected — drag together or press Delete
+            </div>
           )}
 
           {toast && (

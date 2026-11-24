@@ -210,7 +210,7 @@ function StructuredNodeComponent({
   };
 
   const handleClass =
-    "!h-2.5 !w-2.5 !border-2 !border-slate-900 !bg-sky-400/80 opacity-60 group-hover:opacity-100 hover:!scale-125 transition-all";
+    "!h-3.5 !w-3.5 !z-20 redlinify-handle !border-2 !border-slate-900 !bg-sky-400/90 opacity-75 group-hover:opacity-100 hover:!bg-sky-300 hover:!scale-125 transition-all";
 
   return (
     <div

@@ -22,12 +22,19 @@ export interface NodeRect {
 export interface ComputedEdgeRoute {
   sourceHandle: HandleSide;
   targetHandle: HandleSide;
+  sourcePortOffset: number;
+  targetPortOffset: number;
   manualWaypoints: Point[];
   autoWaypoints: Point[];
   curveOffset: Point;
 }
 
-function segmentIntersectsRect(a: Point, b: Point, rect: NodeRect, pad = 14): boolean {
+function segmentIntersectsRect(
+  a: Point,
+  b: Point,
+  rect: NodeRect,
+  pad = 14,
+): boolean {
   const minX = rect.x - pad;
   const maxX = rect.x + rect.width + pad;
   const minY = rect.y - pad;
@@ -62,6 +69,81 @@ function segmentIntersectsRect(a: Point, b: Point, rect: NodeRect, pad = 14): bo
   return t0 <= t1;
 }
 
+function handlePoint(rect: NodeRect, side: HandleSide): Point {
+  switch (side) {
+    case "top":
+      return { x: rect.cx, y: rect.y };
+    case "right":
+      return { x: rect.x + rect.width, y: rect.cy };
+    case "bottom":
+      return { x: rect.cx, y: rect.y + rect.height };
+    case "left":
+      return { x: rect.x, y: rect.cy };
+  }
+}
+
+function handleOutward(side: HandleSide): Point {
+  switch (side) {
+    case "top":
+      return { x: 0, y: -1 };
+    case "right":
+      return { x: 1, y: 0 };
+    case "bottom":
+      return { x: 0, y: 1 };
+    case "left":
+      return { x: -1, y: 0 };
+  }
+}
+
+function approxOrthoPath(
+  srcRect: NodeRect,
+  srcSide: HandleSide,
+  tgtRect: NodeRect,
+  tgtSide: HandleSide,
+): Point[] {
+  const s = handlePoint(srcRect, srcSide);
+  const t = handlePoint(tgtRect, tgtSide);
+  const so = handleOutward(srcSide);
+  const to = handleOutward(tgtSide);
+  const p1 = { x: s.x + so.x * 24, y: s.y + so.y * 24 };
+  const p2 = { x: t.x + to.x * 24, y: t.y + to.y * 24 };
+
+  const srcHoriz = srcSide === "left" || srcSide === "right";
+  const tgtHoriz = tgtSide === "left" || tgtSide === "right";
+
+  if (srcHoriz && tgtHoriz) {
+    const midX = (p1.x + p2.x) / 2;
+    return [s, p1, { x: midX, y: p1.y }, { x: midX, y: p2.y }, p2, t];
+  }
+  if (!srcHoriz && !tgtHoriz) {
+    const midY = (p1.y + p2.y) / 2;
+    return [s, p1, { x: p1.x, y: midY }, { x: p2.x, y: midY }, p2, t];
+  }
+  if (srcHoriz && !tgtHoriz) {
+    return [s, p1, { x: p2.x, y: p1.y }, p2, t];
+  }
+  return [s, p1, { x: p1.x, y: p2.y }, p2, t];
+}
+
+function findCollisions(
+  points: Point[],
+  obstacles: NodeRect[],
+  pad = 12,
+): NodeRect[] {
+  const hit: NodeRect[] = [];
+  for (const rect of obstacles) {
+    let intersects = false;
+    for (let i = 0; i < points.length - 1; i++) {
+      if (segmentIntersectsRect(points[i]!, points[i + 1]!, rect, pad)) {
+        intersects = true;
+        break;
+      }
+    }
+    if (intersects) hit.push(rect);
+  }
+  return hit;
+}
+
 function defaultHandlesForDelta(dx: number, dy: number): {
   sourceHandle: HandleSide;
   targetHandle: HandleSide;
@@ -77,9 +159,9 @@ function defaultHandlesForDelta(dx: number, dy: number): {
 }
 
 /**
- * Computes smart default handles, symmetric bowing for reciprocal/parallel edges
- * (`A -> B` and `B -> A`), and obstacle-avoiding detours for skip/back-edges
- * while preserving user-specified `edge_routes`.
+ * Computes smart default handles, multi-port side spreading, symmetric bowing
+ * for reciprocal/parallel edges (`A -> B` and `B -> A`), and obstacle-avoiding
+ * detours while honoring user-specified `edge_routes`.
  */
 export function computeSmartEdgeRouting(
   view: DesignView,
@@ -103,8 +185,6 @@ export function computeSmartEdgeRouting(
     });
   }
 
-  // Group edges by unordered node pair so reciprocal (`A->B` + `B->A`) and
-  // parallel edges bow symmetrically on opposite physical sides.
   const pairGroups = new Map<string, string[]>();
   for (const edge of view.edges) {
     const pairKey =
@@ -129,6 +209,8 @@ export function computeSmartEdgeRouting(
       result[edge.id] = {
         sourceHandle: userRoute?.source_handle ?? "right",
         targetHandle: userRoute?.target_handle ?? "left",
+        sourcePortOffset: 0,
+        targetPortOffset: 0,
         manualWaypoints: userRoute?.waypoints ?? [],
         autoWaypoints: [],
         curveOffset: { x: 0, y: 0 },
@@ -154,6 +236,8 @@ export function computeSmartEdgeRouting(
       result[edge.id] = {
         sourceHandle: userRoute?.source_handle ?? "right",
         targetHandle: userRoute?.target_handle ?? "top",
+        sourcePortOffset: 0,
+        targetPortOffset: 0,
         manualWaypoints,
         autoWaypoints,
         curveOffset: { x: 0, y: 0 },
@@ -191,7 +275,6 @@ export function computeSmartEdgeRouting(
       };
     }
 
-    // Detect intermediate box collisions (e.g., feedback back-edges or skip connections)
     let autoWaypoints: Point[] = [];
     let autoSourceHandle = defaults.sourceHandle;
     let autoTargetHandle = defaults.targetHandle;
@@ -199,51 +282,82 @@ export function computeSmartEdgeRouting(
     if (
       manualWaypoints.length === 0 &&
       !userRoute?.source_handle &&
-      !userRoute?.target_handle
+      !userRoute?.target_handle &&
+      siblings.length === 1
     ) {
-      const srcCenter = { x: srcRect.cx, y: srcRect.cy };
-      const tgtCenter = { x: tgtRect.cx, y: tgtRect.cy };
-      const intersected: NodeRect[] = [];
-
+      const obstacles: NodeRect[] = [];
       for (const [nodeId, rect] of rects.entries()) {
-        if (nodeId === edge.source || nodeId === edge.target) continue;
-        if (segmentIntersectsRect(srcCenter, tgtCenter, rect, 18)) {
-          intersected.push(rect);
+        if (nodeId !== edge.source && nodeId !== edge.target) {
+          obstacles.push(rect);
         }
       }
 
-      if (intersected.length > 0) {
-        const mostlyHorizontal = Math.abs(dx) >= Math.abs(dy);
-        if (mostlyHorizontal) {
-          const maxBottom = Math.max(
-            srcRect.y + srcRect.height,
-            tgtRect.y + tgtRect.height,
-            ...intersected.map((r) => r.y + r.height),
-          );
-          const laneY = Math.round(maxBottom + 46 + lrDetourCount * 32);
-          lrDetourCount += 1;
-          autoSourceHandle = "bottom";
-          autoTargetHandle = "bottom";
-          autoWaypoints = [
-            { x: Math.round(srcRect.cx), y: laneY },
-            { x: Math.round(tgtRect.cx), y: laneY },
-          ];
-          curveOffset = { x: 0, y: 0 };
-        } else {
-          const maxRight = Math.max(
-            srcRect.x + srcRect.width,
-            tgtRect.x + tgtRect.width,
-            ...intersected.map((r) => r.x + r.width),
-          );
-          const laneX = Math.round(maxRight + 64 + tbDetourCount * 36);
-          tbDetourCount += 1;
-          autoSourceHandle = "right";
-          autoTargetHandle = "right";
-          autoWaypoints = [
-            { x: laneX, y: Math.round(srcRect.cy) },
-            { x: laneX, y: Math.round(tgtRect.cy) },
-          ];
-          curveOffset = { x: 0, y: 0 };
+      const defaultPath = approxOrthoPath(
+        srcRect,
+        defaults.sourceHandle,
+        tgtRect,
+        defaults.targetHandle,
+      );
+      const hitOnDefault = findCollisions(defaultPath, obstacles, 12);
+
+      if (hitOnDefault.length > 0) {
+        // First try alternative direct handle combinations that avoid boxes
+        const candidates: Array<[HandleSide, HandleSide]> = [
+          [defaults.sourceHandle, dy >= 0 ? "top" : "bottom"],
+          [dy >= 0 ? "bottom" : "top", defaults.targetHandle],
+          ["bottom", "top"],
+          ["top", "bottom"],
+          ["right", "left"],
+          ["left", "right"],
+          ["bottom", "bottom"],
+          ["top", "top"],
+        ];
+
+        let foundCleanDirect = false;
+        for (const [cSrc, cTgt] of candidates) {
+          const testPath = approxOrthoPath(srcRect, cSrc, tgtRect, cTgt);
+          if (findCollisions(testPath, obstacles, 12).length === 0) {
+            autoSourceHandle = cSrc;
+            autoTargetHandle = cTgt;
+            foundCleanDirect = true;
+            break;
+          }
+        }
+
+        // Otherwise build an outer detour lane completely outside hit boxes
+        if (!foundCleanDirect) {
+          const mostlyHorizontal = Math.abs(dx) >= Math.abs(dy);
+          if (mostlyHorizontal) {
+            const maxBottom = Math.max(
+              srcRect.y + srcRect.height,
+              tgtRect.y + tgtRect.height,
+              ...hitOnDefault.map((r) => r.y + r.height),
+            );
+            const laneY = Math.round(maxBottom + 48 + lrDetourCount * 32);
+            lrDetourCount += 1;
+            autoSourceHandle = "bottom";
+            autoTargetHandle = "bottom";
+            autoWaypoints = [
+              { x: Math.round(srcRect.cx), y: laneY },
+              { x: Math.round(tgtRect.cx), y: laneY },
+            ];
+            curveOffset = { x: 0, y: 0 };
+          } else {
+            const maxRight = Math.max(
+              srcRect.x + srcRect.width,
+              tgtRect.x + tgtRect.width,
+              ...hitOnDefault.map((r) => r.x + r.width),
+            );
+            const laneX = Math.round(maxRight + 64 + tbDetourCount * 36);
+            tbDetourCount += 1;
+            autoSourceHandle = "right";
+            autoTargetHandle = "right";
+            autoWaypoints = [
+              { x: laneX, y: Math.round(srcRect.cy) },
+              { x: laneX, y: Math.round(tgtRect.cy) },
+            ];
+            curveOffset = { x: 0, y: 0 };
+          }
         }
       }
     }
@@ -251,10 +365,71 @@ export function computeSmartEdgeRouting(
     result[edge.id] = {
       sourceHandle: userRoute?.source_handle ?? autoSourceHandle,
       targetHandle: userRoute?.target_handle ?? autoTargetHandle,
+      sourcePortOffset: 0,
+      targetPortOffset: 0,
       manualWaypoints,
       autoWaypoints,
       curveOffset,
     };
+  }
+
+  // Spread multiple attachments sharing the same side of a node so lines & crow's feet never overlap
+  const sideBuckets = new Map<
+    string,
+    Array<{
+      edgeId: string;
+      end: "source" | "target";
+      sortCoord: number;
+      sideLength: number;
+    }>
+  >();
+
+  for (const edge of view.edges) {
+    const route = result[edge.id];
+    const srcRect = rects.get(edge.source);
+    const tgtRect = rects.get(edge.target);
+    if (!route || !srcRect || !tgtRect) continue;
+
+    const srcHoriz =
+      route.sourceHandle === "left" || route.sourceHandle === "right";
+    const srcKey = `${edge.source}:${route.sourceHandle}`;
+    const srcList = sideBuckets.get(srcKey) ?? [];
+    srcList.push({
+      edgeId: edge.id,
+      end: "source",
+      sortCoord: srcHoriz ? tgtRect.cy : tgtRect.cx,
+      sideLength: srcHoriz ? srcRect.height : srcRect.width,
+    });
+    sideBuckets.set(srcKey, srcList);
+
+    const tgtHoriz =
+      route.targetHandle === "left" || route.targetHandle === "right";
+    const tgtKey = `${edge.target}:${route.targetHandle}`;
+    const tgtList = sideBuckets.get(tgtKey) ?? [];
+    tgtList.push({
+      edgeId: edge.id,
+      end: "target",
+      sortCoord: tgtHoriz ? srcRect.cy : srcRect.cx,
+      sideLength: tgtHoriz ? tgtRect.height : tgtRect.width,
+    });
+    sideBuckets.set(tgtKey, tgtList);
+  }
+
+  for (const attachments of sideBuckets.values()) {
+    if (attachments.length <= 1) continue;
+    attachments.sort((a, b) => a.sortCoord - b.sortCoord);
+    const sideLength = attachments[0]!.sideLength;
+    const step = Math.min(28, Math.max(14, (sideLength - 44) / attachments.length));
+    const maxOffset = Math.max(16, sideLength / 2 - 24);
+
+    attachments.forEach((att, idx) => {
+      const raw = (idx - (attachments.length - 1) / 2) * step;
+      const clamped = Math.round(Math.max(-maxOffset, Math.min(maxOffset, raw)));
+      const route = result[att.edgeId];
+      if (!route) return;
+      if (att.end === "source") route.sourcePortOffset = clamped;
+      else route.targetPortOffset = clamped;
+    });
   }
 
   return result;
