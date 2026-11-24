@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DesignStorage, type DesignView } from "@redlinify/shared";
-import { createRedlinifyMcpServer } from "../src/mcp.js";
+import { createRedlinifyMcpServer, type RedlinifyMcpOptions } from "../src/mcp.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -16,12 +16,12 @@ afterEach(async () => {
   }
 });
 
-async function setupMcp() {
+async function setupMcp(options?: RedlinifyMcpOptions) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "redlinify-mcp-"));
   const storage = new DesignStorage(dir);
   await storage.initWorkspace("McpRepo");
 
-  const server = createRedlinifyMcpServer(storage);
+  const server = createRedlinifyMcpServer(storage, options);
   const client = new Client({ name: "test-client", version: "0.1.0" });
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
@@ -45,8 +45,8 @@ function parseToolJson<T>(res: Awaited<ReturnType<Client["callTool"]>>): T {
   return JSON.parse(first!.text) as T;
 }
 
-describe("Redlinify MCP Server (9 semantic tools)", () => {
-  it("lists all 9 tools and executes full workflow end-to-end", async () => {
+describe("Redlinify MCP Server (10 semantic tools)", () => {
+  it("lists all 10 tools and executes full workflow end-to-end", async () => {
     const { storage, client } = await setupMcp();
 
     const tools = await client.listTools();
@@ -56,6 +56,7 @@ describe("Redlinify MCP Server (9 semantic tools)", () => {
       "get_pending_feedback",
       "get_view",
       "get_workspace_status",
+      "open_workbench",
       "patch_view",
       "post_thread_message",
       "sync_code_refs",
@@ -235,5 +236,75 @@ describe("Redlinify MCP Server (9 semantic tools)", () => {
       await client.callTool({ name: "get_pending_feedback", arguments: {} }),
     );
     expect(postSyncFeedback.view_diffs).toEqual([]);
+  });
+
+  it("auto-ensures UI url on diagram writes and supports open_workbench", async () => {
+    const ensureCalls: Array<{ openBrowser?: boolean } | undefined> = [];
+    const { client } = await setupMcp({
+      ensureUi: async (opts) => {
+        ensureCalls.push(opts);
+        return {
+          url: "http://127.0.0.1:4173",
+          started: ensureCalls.length === 1,
+          browser_opened: Boolean(opts?.openBrowser),
+        };
+      },
+      getRunningUiUrl: async () => "http://127.0.0.1:4173",
+    });
+
+    const view: DesignView = {
+      id: "arch",
+      title: "Architecture",
+      direction: "TB",
+      nodes: [
+        {
+          id: "api",
+          kind: "Service",
+          title: "API",
+          status: "draft",
+          locked: false,
+          sections: [],
+        },
+      ],
+      edges: [],
+    };
+
+    const created = parseToolJson<{ view_hash: string; ui_url?: string }>(
+      await client.callTool({
+        name: "upsert_view",
+        arguments: { view },
+      }),
+    );
+    expect(created.ui_url).toBe("http://127.0.0.1:4173/#view=arch");
+
+    const patched = parseToolJson<{ ui_url?: string }>(
+      await client.callTool({
+        name: "patch_view",
+        arguments: {
+          view_id: "arch",
+          base_hash: created.view_hash,
+          patch: { update_nodes: [{ id: "api", status: "approved" }] },
+        },
+      }),
+    );
+    expect(patched.ui_url).toBe("http://127.0.0.1:4173/#view=arch");
+
+    const opened = parseToolJson<{
+      available: boolean;
+      url: string;
+      browser_opened: boolean;
+    }>(
+      await client.callTool({
+        name: "open_workbench",
+        arguments: { view_id: "arch", open_browser: true },
+      }),
+    );
+    expect(opened).toEqual({
+      available: true,
+      url: "http://127.0.0.1:4173/#view=arch",
+      started: false,
+      browser_opened: true,
+    });
+    expect(ensureCalls).toHaveLength(3);
   });
 });

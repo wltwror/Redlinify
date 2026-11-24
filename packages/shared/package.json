@@ -2,6 +2,15 @@
   "name": "@redlinify/shared",
   "version": "0.1.0",
   "description": "Shared Zod schemas, canonical hashing, semantic diff engine, and locked atomic storage for Redlinify.",
+  "homepage": "https://github.com/wltwror/Redlinify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wltwror/Redlinify.git",
+    "directory": "packages/shared"
+  },
+  "bugs": {
+    "url": "https://github.com/wltwror/Redlinify/issues"
+  },
   "license": "MIT",
   "author": "Vojtěch Faltus",
   "keywords": [

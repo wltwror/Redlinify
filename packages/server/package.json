@@ -1,7 +1,16 @@
 {
   "name": "@redlinify/server",
   "version": "0.1.0",
-  "description": "Redlinify CLI, stdio MCP server, and local HTTP/WebSocket workbench server.",
+  "description": "Redlinify CLI, stdio MCP server with auto-UI launcher, and local HTTP/WebSocket workbench server.",
+  "homepage": "https://github.com/wltwror/Redlinify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wltwror/Redlinify.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/wltwror/Redlinify/issues"
+  },
   "license": "MIT",
   "author": "Vojtěch Faltus",
   "keywords": [

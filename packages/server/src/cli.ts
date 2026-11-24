@@ -5,6 +5,14 @@ import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DesignStorage, findProjectRoot } from "@redlinify/shared";
 import { createRedlinifyMcpServer } from "./mcp.js";
+import {
+  ensureUiServer,
+  getRunningUiUrl,
+  openUrlInBrowser,
+  removeUiMeta,
+  stopUiServer,
+  writeUiMeta,
+} from "./uiDaemon.js";
 import { createWebServer } from "./web.js";
 
 function readPackageVersion(): string {
@@ -42,6 +50,14 @@ function parseArgs(argv: string[]): {
   return { command, flags };
 }
 
+function parsePortFlag(raw: string | undefined, fallback = 4173): number {
+  const port = raw ? Number(raw) : fallback;
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(`Invalid port: ${raw}`);
+  }
+  return port;
+}
+
 function resolveUiDistDir(): string | undefined {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -60,9 +76,10 @@ function printHelp(): void {
   process.stderr.write(`Redlinify CLI v${readPackageVersion()}
 
 Usage:
+  redlinify mcp  [--dir <path>] [--port 4173] [--open] [--no-ui]
+  redlinify ui   [--dir <path>] [--port 4173] [--host 127.0.0.1] [--open]
+  redlinify stop [--dir <path>] [--port 4173] [--host 127.0.0.1]
   redlinify init [--dir <path>] [--name <project_name>]
-  redlinify mcp  [--dir <path>]
-  redlinify ui   [--dir <path>] [--port 4173] [--host 127.0.0.1]
   redlinify --version | -v
   redlinify --help | -h
 `);
@@ -94,22 +111,54 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "stop") {
+    const host = flags.host ?? "127.0.0.1";
+    const port = parsePortFlag(flags.port);
+    const res = await stopUiServer(rootDir, port, host);
+    if (res.stopped) {
+      process.stdout.write(
+        `Stopped Redlinify UI (${res.url ?? `pid ${res.pid}`})\n`,
+      );
+    } else {
+      process.stdout.write(`No running Redlinify UI found for ${rootDir}\n`);
+    }
+    return;
+  }
+
   if (command === "mcp") {
-    const server = createRedlinifyMcpServer(storage);
+    const preferredPort = parsePortFlag(flags.port);
+    const autoUi = flags["no-ui"] !== "true";
+    const openOnAutoStart = flags.open === "true";
+    const cliEntryPath = fileURLToPath(import.meta.url);
+
+    const server = createRedlinifyMcpServer(
+      storage,
+      autoUi
+        ? {
+            ensureUi: (opts) =>
+              ensureUiServer({
+                rootDir,
+                preferredPort,
+                host: "127.0.0.1",
+                openBrowser: opts?.openBrowser ?? openOnAutoStart,
+                cliEntryPath,
+              }),
+            getRunningUiUrl: () =>
+              getRunningUiUrl(rootDir, preferredPort, "127.0.0.1"),
+          }
+        : undefined,
+    );
     const transport = new StdioServerTransport();
     await server.connect(transport);
     process.stderr.write(
-      `[redlinify mcp] connected via stdio (root: ${rootDir})\n`,
+      `[redlinify mcp] connected via stdio (root: ${rootDir}, auto-ui: ${autoUi ? "on" : "off"})\n`,
     );
     return;
   }
 
   if (command === "ui") {
     const host = flags.host ?? "127.0.0.1";
-    const port = flags.port ? Number(flags.port) : 4173;
-    if (!Number.isInteger(port) || port < 0 || port > 65535) {
-      throw new Error(`Invalid port: ${flags.port}`);
-    }
+    const port = parsePortFlag(flags.port);
     const uiDistDir = resolveUiDistDir();
     if (!uiDistDir) {
       process.stderr.write(
@@ -138,11 +187,26 @@ async function main(): Promise<void> {
       }
       throw err;
     }
+
+    await writeUiMeta(rootDir, {
+      pid: process.pid,
+      port: running.port,
+      host: running.host,
+      url: running.url,
+      root_dir: path.resolve(rootDir),
+      started_at: new Date().toISOString(),
+    });
+
     process.stdout.write(
       `Redlinify UI listening at ${running.url} (project root: ${rootDir})\n`,
     );
 
+    if (flags.open === "true") {
+      openUrlInBrowser(running.url);
+    }
+
     const shutdown = async () => {
+      await removeUiMeta(rootDir);
       await running.close().catch(() => {});
       process.exit(0);
     };

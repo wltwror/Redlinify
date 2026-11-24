@@ -1,7 +1,15 @@
 {
   "name": "redlinify",
   "version": "0.1.0",
-  "description": "Local-first, repo-native collaborative design workbench for human developers and AI coding agents.",
+  "description": "Stop fighting AI architecture in chat. Visual, Git-native diagrams & ER schemas shared between developers and coding agents via MCP.",
+  "homepage": "https://github.com/wltwror/Redlinify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wltwror/Redlinify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wltwror/Redlinify/issues"
+  },
   "license": "MIT",
   "author": "Vojtěch Faltus",
   "keywords": [

@@ -47,6 +47,7 @@ const DESIGN_GITIGNORE_CONTENT = `.layout/
 .checkpoint/
 .lock
 .tmp-*
+.ui-server.json
 `;
 
 export interface StorageOptions {

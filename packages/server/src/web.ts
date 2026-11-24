@@ -251,6 +251,8 @@ export async function createWebServer(
             ok: true,
             project_name: status.project_name,
             initialized: status.initialized,
+            root_dir: path.resolve(storage.rootDir),
+            pid: process.pid,
           });
           return;
         }

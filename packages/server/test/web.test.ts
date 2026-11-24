@@ -65,7 +65,7 @@ function sampleView(id = "classes"): DesignView {
 
 describe("Redlinify HTTP + WebSocket server", () => {
   it("serves health, workspace, view CRUD, 409 conflicts, threads, and cross-links", async () => {
-    const { storage, server } = await setupServer();
+    const { dir, storage, server } = await setupServer();
     await storage.upsertView({ view: sampleView("classes"), actor: "agent" });
     await storage.upsertView({
       view: {
@@ -94,6 +94,8 @@ describe("Redlinify HTTP + WebSocket server", () => {
       ok: true,
       project_name: "WebTest",
       initialized: true,
+      root_dir: path.resolve(dir),
+      pid: process.pid,
     });
 
     const viewRes = await fetch(`${server.url}/api/views/classes`);

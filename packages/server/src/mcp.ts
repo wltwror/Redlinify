@@ -12,6 +12,21 @@ import {
   idSlugSchema,
 } from "@redlinify/shared";
 
+export interface RedlinifyMcpOptions {
+  ensureUi?: (opts?: { openBrowser?: boolean }) => Promise<{
+    url: string;
+    started: boolean;
+    browser_opened?: boolean;
+  } | null>;
+  getRunningUiUrl?: () => Promise<string | null>;
+}
+
+const MCP_WORKFLOW_INSTRUCTIONS = `Redlinify is a collaborative architecture & ER design workbench stored in .design/.
+- Inspect first: call get_workspace_status() to check existing views, entity_ref slugs, and pending view_requests.
+- Design cleanly: write concise multi-view diagrams via upsert_view / patch_view (diagram_type: "general" for architecture/flows, "er" for schemas). Creating or updating a diagram automatically ensures the local browser UI is running and returns ui_url—share that clickable link with the user (or call open_workbench).
+- Ask in the diagram: when facing ambiguity or tradeoffs, commit your best draft, set node status="needs_input", and open a concise thread via post_thread_message anchored to that exact node/edge instead of long chat essays.
+- Iterate safely: always start review turns with get_pending_feedback(), respect locked nodes/edges (never mutate, delete, or unlock them), resolve settled threads with a 1-line resolution_summary (stored under Decisions/ADRs), and link finished code via sync_code_refs.`;
+
 function okResult(data: unknown) {
   return {
     content: [
@@ -61,11 +76,33 @@ function errResult(err: unknown) {
   };
 }
 
-export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
-  const server = new McpServer({
-    name: "redlinify",
-    version: "0.1.0",
-  });
+function viewDeepLink(baseUrl: string, viewId: string): string {
+  return `${baseUrl}/#view=${encodeURIComponent(viewId)}`;
+}
+
+export function createRedlinifyMcpServer(
+  storage: DesignStorage,
+  options?: RedlinifyMcpOptions,
+): McpServer {
+  const server = new McpServer(
+    {
+      name: "redlinify",
+      version: "0.1.0",
+    },
+    {
+      instructions: MCP_WORKFLOW_INSTRUCTIONS,
+    },
+  );
+
+  const ensureViewUiUrl = async (viewId: string): Promise<string | undefined> => {
+    if (!options?.ensureUi) return undefined;
+    try {
+      const ui = await options.ensureUi();
+      return ui?.url ? viewDeepLink(ui.url, viewId) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
 
   server.tool(
     "get_workspace_status",
@@ -73,7 +110,52 @@ export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
     {},
     async () => {
       try {
-        return okResult(await storage.getWorkspaceStatus());
+        const status = await storage.getWorkspaceStatus();
+        const ui_url = options?.getRunningUiUrl
+          ? await options.getRunningUiUrl().catch(() => null)
+          : null;
+        return okResult({
+          ...status,
+          ...(ui_url ? { ui_url } : {}),
+        });
+      } catch (err) {
+        return errResult(err);
+      }
+    },
+  );
+
+  server.tool(
+    "open_workbench",
+    "Ensure the local Redlinify browser workbench UI is running for this repo (auto-starting a detached loopback server if needed) and optionally open it in the user's browser.",
+    {
+      view_id: idSlugSchema("view_id").optional(),
+      open_browser: z.boolean().optional(),
+    },
+    async ({ view_id, open_browser }) => {
+      try {
+        if (!options?.ensureUi) {
+          return okResult({
+            available: false,
+            message:
+              "UI auto-start is disabled (--no-ui). Launch the workbench manually with `redlinify ui`.",
+          });
+        }
+        const res = await options.ensureUi({
+          openBrowser: open_browser ?? true,
+        });
+        if (!res) {
+          return okResult({
+            available: false,
+            message: "UI workbench did not return a URL.",
+          });
+        }
+        const url = view_id ? viewDeepLink(res.url, view_id) : res.url;
+        return okResult({
+          available: true,
+          url,
+          started: res.started,
+          browser_opened: Boolean(res.browser_opened),
+        });
       } catch (err) {
         return errResult(err);
       }
@@ -140,7 +222,7 @@ export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
 
   server.tool(
     "upsert_view",
-    "Create or replace a semantic DesignView. Requires base_hash when updating an existing view (unless force=true), preserves existing code_refs when omitted, and rejects mutating/deleting/unlocking locked nodes or edges.",
+    "Create or replace a semantic DesignView (auto-initializes .design/ and ensures the local workbench UI is running). Requires base_hash when updating an existing view (unless force=true), preserves existing code_refs when omitted, and rejects mutating/deleting/unlocking locked nodes or edges.",
     {
       view: DesignViewSchema,
       base_hash: z.string().min(1).optional(),
@@ -156,7 +238,11 @@ export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
           actor: "agent",
           force,
         });
-        return okResult(res);
+        const ui_url = await ensureViewUiUrl(res.view.id);
+        return okResult({
+          ...res,
+          ...(ui_url ? { ui_url } : {}),
+        });
       } catch (err) {
         return errResult(err);
       }
@@ -179,7 +265,11 @@ export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
           patch,
           actor: "agent",
         });
-        return okResult(res);
+        const ui_url = await ensureViewUiUrl(res.view.id);
+        return okResult({
+          ...res,
+          ...(ui_url ? { ui_url } : {}),
+        });
       } catch (err) {
         return errResult(err);
       }
@@ -210,7 +300,7 @@ export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
 
   server.tool(
     "post_thread_message",
-    "Create an anchored thread (question, change_request, decision, drift_alert) or append an agent reply. When resolve=true, requires a concise 1-line resolution_summary saved as an ADR.",
+    "Create an anchored thread (question, change_request, decision, drift_alert) or append an agent reply. When resolve=true, requires a concise 1-line resolution_summary saved under Decisions (ADRs).",
     {
       thread_id: idSlugSchema("thread_id").optional(),
       target_type: ThreadTargetTypeSchema.optional(),
@@ -238,7 +328,7 @@ export function createRedlinifyMcpServer(storage: DesignStorage): McpServer {
 
   server.tool(
     "get_node_history",
-    "Retrieve full message transcripts of resolved ADR threads matching target_id, entity_ref, view_id, or search query.",
+    "Retrieve full message transcripts of resolved Decision (ADR) threads matching target_id, entity_ref, view_id, or search query.",
     {
       target_id: idSlugSchema("target_id").optional(),
       entity_ref: EntityRefSchema.optional(),

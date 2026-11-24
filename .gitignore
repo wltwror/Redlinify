@@ -6,3 +6,4 @@ dist/
 .design/.checkpoint/
 .design/.lock
 .design/.tmp-*
+.design/.ui-server.json
