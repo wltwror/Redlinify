@@ -59,7 +59,11 @@ import {
   type WorkspaceSnapshot,
 } from "../api/client";
 import { computeAutoLayout } from "../layout/elk";
-import { computeSmartEdgeRouting, type Point } from "../layout/routing";
+import {
+  computeSmartEdgeRouting,
+  insertWaypointAlongEdge,
+  type Point,
+} from "../layout/routing";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EdgeCreateModal } from "./EdgeCreateModal";
 import {
@@ -1661,26 +1665,26 @@ function WorkbenchInner() {
         id: "add_bend",
         label: "Add Bend Point Here",
         onSelect: () => {
-          const existingWps = edgeRoutesRef.current[edge.id]?.waypoints ?? [];
-          const rfEdge = rfEdges.find((e) => e.id === edge.id);
-          const handles =
-            rfEdge?.sourceHandle && rfEdge?.targetHandle
-              ? {
-                  source_handle: rfEdge.sourceHandle as HandleSide,
-                  target_handle: rfEdge.targetHandle as HandleSide,
-                }
-              : undefined;
-          handleCommitWaypoints(
+          const measuredMap: Record<
+            string,
+            { width?: number; height?: number }
+          > = {};
+          for (const n of rfNodes) {
+            const w = n.measured?.width ?? n.width;
+            const h = n.measured?.height ?? n.height;
+            if (w !== undefined || h !== undefined) {
+              measuredMap[n.id] = { width: w, height: h };
+            }
+          }
+          const inserted = insertWaypointAlongEdge(
+            activeView,
+            positionsRef.current,
+            edgeRoutesRef.current,
             edge.id,
-            [
-              ...existingWps,
-              {
-                x: Math.round(contextMenu.flowPos.x),
-                y: Math.round(contextMenu.flowPos.y),
-              },
-            ],
-            handles,
+            contextMenu.flowPos,
+            measuredMap,
           );
+          handleCommitWaypoints(edge.id, inserted.waypoints, inserted.handles);
         },
       },
       {
@@ -1784,7 +1788,7 @@ function WorkbenchInner() {
     historyTick,
     persistCurrentLayout,
     persistView,
-    rfEdges,
+    rfNodes,
     selectSingleNode,
     selectedEdgeId,
     selectedNodeId,
@@ -1938,9 +1942,17 @@ function WorkbenchInner() {
 
   const miniMapNodeColor = useCallback(
     (n: StructuredFlowNode) => {
-      const data = n.data as { node?: DesignNode } | undefined;
+      const data = n.data as
+        | { node?: DesignNode; waitingOnHumanCount?: number }
+        | undefined;
       if (data?.node?.status === "drifted") {
         return theme === "dark" ? "#f43f5e" : "#e11d48";
+      }
+      if (
+        (data?.waitingOnHumanCount ?? 0) > 0 ||
+        data?.node?.status === "needs_input"
+      ) {
+        return theme === "dark" ? "#f59e0b" : "#d97706";
       }
       if (data?.node?.locked) {
         return theme === "dark" ? "#a78bfa" : "#7c3aed";

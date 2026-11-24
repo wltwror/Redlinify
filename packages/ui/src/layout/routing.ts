@@ -82,6 +82,57 @@ function handlePoint(rect: NodeRect, side: HandleSide): Point {
   }
 }
 
+function shiftHandlePoint(pt: Point, side: HandleSide, offset: number): Point {
+  if (!offset) return pt;
+  if (side === "left" || side === "right") {
+    return { x: pt.x, y: pt.y + offset };
+  }
+  return { x: pt.x + offset, y: pt.y };
+}
+
+function pointToSegmentDistSq(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-6) {
+    const px = p.x - a.x;
+    const py = p.y - a.y;
+    return px * px + py * py;
+  }
+  const t = Math.max(
+    0,
+    Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq),
+  );
+  const projX = a.x + dx * t;
+  const projY = a.y + dy * t;
+  const diffX = p.x - projX;
+  const diffY = p.y - projY;
+  return diffX * diffX + diffY * diffY;
+}
+
+function buildNodeRects(
+  view: DesignView,
+  positions: Record<string, Point>,
+  measured?: Record<string, { width?: number; height?: number }>,
+): Map<string, NodeRect> {
+  const rects = new Map<string, NodeRect>();
+  for (const node of view.nodes) {
+    const pos = positions[node.id] ?? { x: 40, y: 40 };
+    const est = estimateNodeSize(node, view.diagram_type);
+    const w = measured?.[node.id]?.width ?? est.width;
+    const h = measured?.[node.id]?.height ?? est.height;
+    rects.set(node.id, {
+      x: pos.x,
+      y: pos.y,
+      width: w,
+      height: h,
+      cx: pos.x + w / 2,
+      cy: pos.y + h / 2,
+    });
+  }
+  return rects;
+}
+
 function handleOutward(side: HandleSide): Point {
   switch (side) {
     case "top":
@@ -169,21 +220,7 @@ export function computeSmartEdgeRouting(
   edgeRoutes: Record<string, EdgeRoute> = {},
   measured?: Record<string, { width?: number; height?: number }>,
 ): Record<string, ComputedEdgeRoute> {
-  const rects = new Map<string, NodeRect>();
-  for (const node of view.nodes) {
-    const pos = positions[node.id] ?? { x: 40, y: 40 };
-    const est = estimateNodeSize(node, view.diagram_type);
-    const w = measured?.[node.id]?.width ?? est.width;
-    const h = measured?.[node.id]?.height ?? est.height;
-    rects.set(node.id, {
-      x: pos.x,
-      y: pos.y,
-      width: w,
-      height: h,
-      cx: pos.x + w / 2,
-      cy: pos.y + h / 2,
-    });
-  }
+  const rects = buildNodeRects(view, positions, measured);
 
   const pairGroups = new Map<string, string[]>();
   for (const edge of view.edges) {
@@ -433,4 +470,79 @@ export function computeSmartEdgeRouting(
   }
 
   return result;
+}
+
+/**
+ * Inserts a new waypoint into whichever segment of `edgeId`'s rendered polyline
+ * is closest to `newPt`, preventing self-crossing loops when adding points
+ * earlier along an already-bent edge.
+ */
+export function insertWaypointAlongEdge(
+  view: DesignView,
+  positions: Record<string, Point>,
+  edgeRoutes: Record<string, EdgeRoute>,
+  edgeId: string,
+  newPt: Point,
+  measured?: Record<string, { width?: number; height?: number }>,
+): {
+  waypoints: Point[];
+  handles: { source_handle: HandleSide; target_handle: HandleSide };
+} {
+  const routing = computeSmartEdgeRouting(view, positions, edgeRoutes, measured);
+  const route = routing[edgeId];
+  const roundedPt = { x: Math.round(newPt.x), y: Math.round(newPt.y) };
+
+  if (!route) {
+    const existing = edgeRoutes[edgeId]?.waypoints ?? [];
+    return {
+      waypoints: [...existing, roundedPt],
+      handles: {
+        source_handle: edgeRoutes[edgeId]?.source_handle ?? "right",
+        target_handle: edgeRoutes[edgeId]?.target_handle ?? "left",
+      },
+    };
+  }
+
+  const handles = {
+    source_handle: route.sourceHandle,
+    target_handle: route.targetHandle,
+  };
+  const existingWps = route.manualWaypoints;
+  if (existingWps.length === 0) {
+    return { waypoints: [roundedPt], handles };
+  }
+
+  const edge = view.edges.find((e) => e.id === edgeId);
+  const rects = buildNodeRects(view, positions, measured);
+  const srcRect = edge ? rects.get(edge.source) : undefined;
+  const tgtRect = edge ? rects.get(edge.target) : undefined;
+  if (!srcRect || !tgtRect) {
+    return { waypoints: [...existingWps, roundedPt], handles };
+  }
+
+  const srcPt = shiftHandlePoint(
+    handlePoint(srcRect, route.sourceHandle),
+    route.sourceHandle,
+    route.sourcePortOffset,
+  );
+  const tgtPt = shiftHandlePoint(
+    handlePoint(tgtRect, route.targetHandle),
+    route.targetHandle,
+    route.targetPortOffset,
+  );
+
+  const pts = [srcPt, ...existingWps, tgtPt];
+  let bestIdx = existingWps.length;
+  let bestDist = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = pointToSegmentDistSq(roundedPt, pts[i]!, pts[i + 1]!);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+
+  const nextWps = [...existingWps];
+  nextWps.splice(bestIdx, 0, roundedPt);
+  return { waypoints: nextWps, handles };
 }

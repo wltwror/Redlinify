@@ -319,11 +319,19 @@ export function StepEdge({
     const last = activeManual[activeManual.length - 1]!;
     sourceOutward = normalizeVec(first.x - sx, first.y - sy, defaultSourceOutward);
     targetOutward = normalizeVec(last.x - tx, last.y - ty, defaultTargetOutward);
-    const midIdx = Math.floor(activeManual.length / 2);
-    const wp = activeManual[midIdx]!;
-    labelX = wp.x;
-    labelY = wp.y;
-    bendKnob = wp;
+    if (activeManual.length >= 2) {
+      const midIdx = Math.floor(activeManual.length / 2);
+      const a = activeManual[midIdx - 1]!;
+      const b = activeManual[midIdx]!;
+      labelX = (a.x + b.x) / 2;
+      labelY = (a.y + b.y) / 2;
+      bendKnob = { x: labelX, y: labelY };
+    } else {
+      const wp = activeManual[0]!;
+      labelX = wp.x;
+      labelY = wp.y;
+      bendKnob = wp;
+    }
   } else if (autoWaypoints.length > 0) {
     const pts = [{ x: sx, y: sy }, ...autoWaypoints, { x: tx, y: ty }];
     edgePath = buildRoundedPolylinePath(pts, 14);
@@ -368,18 +376,27 @@ export function StepEdge({
 
   const startWaypointDrag = (
     e: React.PointerEvent,
-    waypointIdx: number | "new",
+    target:
+      | { kind: "move"; index: number }
+      | { kind: "insert"; index: number; initialPt: Point },
   ) => {
     e.stopPropagation();
     e.preventDefault();
     draggingRef.current = true;
 
     const initialList =
-      waypointIdx === "new"
-        ? [{ x: Math.round(bendKnob.x), y: Math.round(bendKnob.y) }]
+      target.kind === "insert"
+        ? [
+            ...activeManual.slice(0, target.index),
+            target.initialPt,
+            ...activeManual.slice(target.index),
+          ]
         : [...activeManual];
-    const targetIdx = waypointIdx === "new" ? 0 : waypointIdx;
+    const targetIdx = target.index;
     let latest = initialList;
+    if (target.kind === "insert") {
+      setDragWaypoints(latest);
+    }
 
     const onMove = (moveEvt: PointerEvent) => {
       const flowPt = screenToFlowPosition({
@@ -446,6 +463,29 @@ export function StepEdge({
     Boolean(designEdge?.locked);
 
   const opacity = data?.dimmed ? 0.2 : 1;
+  const renderedLabelY =
+    selected && activeManual.length === 1 ? labelY - 22 : labelY;
+
+  const splitHandles: Array<{ index: number; mid: Point }> = [];
+  if (selected && activeManual.length >= 1) {
+    const polyPts = [{ x: sx, y: sy }, ...activeManual, { x: tx, y: ty }];
+    for (let i = 0; i < polyPts.length - 1; i++) {
+      const a = polyPts[i]!;
+      const b = polyPts[i + 1]!;
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 72) continue;
+      const mid = {
+        x: Math.round((a.x + b.x) / 2),
+        y: Math.round((a.y + b.y) / 2),
+      };
+      if (
+        hasLabel &&
+        Math.hypot(mid.x - labelX, mid.y - renderedLabelY) < 22
+      ) {
+        continue;
+      }
+      splitHandles.push({ index: i, mid });
+    }
+  }
 
   return (
     <>
@@ -559,7 +599,7 @@ export function StepEdge({
           <div
             style={{
               position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${selected && activeManual.length > 0 ? labelY - 22 : labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px,${renderedLabelY}px)`,
               pointerEvents: "all",
               zIndex: selected ? 40 : 10,
             }}
@@ -584,6 +624,30 @@ export function StepEdge({
         )}
 
         {selected &&
+          splitHandles.map((sh) => (
+            <div
+              key={`split-${sh.index}`}
+              style={{
+                position: "absolute",
+                transform: `translate(-50%, -50%) translate(${sh.mid.x}px,${sh.mid.y}px)`,
+                pointerEvents: "all",
+                zIndex: 45,
+              }}
+              title="Drag to add bend point on this segment"
+              className="nodrag nopan h-3 w-3 rounded-full border-2 border-sky-400/80 bg-slate-950/90 opacity-65 hover:opacity-100 hover:scale-125 shadow-sm cursor-grab active:cursor-grabbing transition-all"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) =>
+                startWaypointDrag(e, {
+                  kind: "insert",
+                  index: sh.index,
+                  initialPt: sh.mid,
+                })
+              }
+            />
+          ))}
+
+        {selected &&
           activeManual.map((pt, idx) => (
             <div
               key={`wp-${idx}`}
@@ -597,7 +661,9 @@ export function StepEdge({
               className="nodrag nopan h-4 w-4 rounded-full border-2 border-slate-950 bg-sky-400 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => startWaypointDrag(e, idx)}
+              onPointerDown={(e) =>
+                startWaypointDrag(e, { kind: "move", index: idx })
+              }
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 const next = activeManual.filter((_, i) => i !== idx);
@@ -628,7 +694,16 @@ export function StepEdge({
             className="nodrag nopan h-4 w-4 rounded-full border-2 border-sky-400 bg-slate-950 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => startWaypointDrag(e, "new")}
+            onPointerDown={(e) =>
+              startWaypointDrag(e, {
+                kind: "insert",
+                index: 0,
+                initialPt: {
+                  x: Math.round(bendKnob.x),
+                  y: Math.round(bendKnob.y),
+                },
+              })
+            }
           />
         )}
       </EdgeLabelRenderer>
