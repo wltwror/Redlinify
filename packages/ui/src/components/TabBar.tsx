@@ -1,7 +1,21 @@
 import { useState } from "react";
-import { Clock, Layers, Plus, X } from "lucide-react";
-import type { ViewDirection, ViewRequest } from "@redlinify/shared/browser";
+import {
+  AlertTriangle,
+  Clock,
+  Database,
+  Layers,
+  MoreVertical,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import type {
+  DiagramType,
+  ViewDirection,
+  ViewRequest,
+} from "@redlinify/shared/browser";
 import type { TabStatusSummary } from "../api/client";
+import { ContextMenu } from "./ContextMenu";
 
 interface TabBarProps {
   projectName: string;
@@ -14,8 +28,10 @@ interface TabBarProps {
   onRequestView: (input: { title: string; prompt: string }) => Promise<void>;
   onCreateBlankView: (input: {
     title: string;
+    diagram_type: DiagramType;
     direction: ViewDirection;
   }) => Promise<void>;
+  onDeleteView: (viewId: string) => Promise<void>;
 }
 
 export function TabBar({
@@ -28,15 +44,27 @@ export function TabBar({
   onDeleteRequest,
   onRequestView,
   onCreateBlankView,
+  onDeleteView,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [mode, setMode] = useState<"request" | "blank">("request");
+  const [mode, setMode] = useState<"request" | "blank">("blank");
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [diagramType, setDiagramType] = useState<DiagramType>("general");
   const [direction, setDirection] = useState<ViewDirection>("TB");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [tabMenu, setTabMenu] = useState<{
+    x: number;
+    y: number;
+    tab: TabStatusSummary;
+  } | null>(null);
+  const [confirmDeleteTab, setConfirmDeleteTab] =
+    useState<TabStatusSummary | null>(null);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const handleDrop = (targetViewId: string) => {
     if (!draggedId || draggedId === targetViewId) {
@@ -59,6 +87,7 @@ export function TabBar({
     setModalOpen(false);
     setTitle("");
     setPrompt("");
+    setDiagramType("general");
     setDirection("TB");
     setError(null);
   };
@@ -77,15 +106,41 @@ export function TabBar({
     setError(null);
     try {
       if (mode === "request") {
-        await onRequestView({ title: title.trim(), prompt: prompt.trim() });
+        const finalPrompt =
+          diagramType === "er"
+            ? `[ER Diagram] ${prompt.trim()}`
+            : prompt.trim();
+        await onRequestView({ title: title.trim(), prompt: finalPrompt });
       } else {
-        await onCreateBlankView({ title: title.trim(), direction });
+        await onCreateBlankView({
+          title: title.trim(),
+          diagram_type: diagramType,
+          direction,
+        });
       }
       resetModal();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create view");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const canConfirmDelete =
+    confirmDeleteTab !== null &&
+    (confirmText.trim() === confirmDeleteTab.title ||
+      confirmText.trim() === confirmDeleteTab.view_id);
+
+  const handleConfirmDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirmDeleteTab || !canConfirmDelete) return;
+    setDeleting(true);
+    try {
+      await onDeleteView(confirmDeleteTab.view_id);
+      setConfirmDeleteTab(null);
+      setConfirmText("");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -109,48 +164,76 @@ export function TabBar({
             const active = tab.view_id === activeViewId;
             const hasBlueDot = tab.has_human_edits || tab.waiting_on_agent > 0;
             const hasRedDot = tab.drifted_count > 0;
+            const isEr = tab.diagram_type === "er";
 
             return (
-              <button
+              <div
                 key={tab.view_id}
-                type="button"
                 draggable
                 onDragStart={() => setDraggedId(tab.view_id)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => handleDrop(tab.view_id)}
-                onClick={() => onSelectView(tab.view_id)}
-                title={tab.description ?? tab.title}
-                className={`group flex shrink-0 items-center gap-1.5 rounded-t-md px-3 py-1.5 text-xs font-medium transition-colors border-b-2 ${
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setTabMenu({ x: e.clientX, y: e.clientY, tab });
+                }}
+                className={`group flex shrink-0 items-center gap-1 rounded-t-md border-b-2 transition-colors ${
                   active
                     ? "bg-slate-950 text-slate-50 border-sky-400"
                     : "bg-slate-900/40 text-slate-400 border-transparent hover:bg-slate-800/70 hover:text-slate-200"
                 }`}
               >
-                <span className="truncate max-w-[160px]">{tab.title}</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectView(tab.view_id)}
+                  title={`${tab.description ?? tab.title} (Right-click for options)`}
+                  className="flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-xs font-medium"
+                >
+                  {isEr && (
+                    <Database className="h-3 w-3 shrink-0 text-emerald-400" />
+                  )}
+                  <span className="truncate max-w-[160px]">{tab.title}</span>
 
-                {tab.waiting_on_human > 0 && (
-                  <span
-                    title={`${tab.waiting_on_human} open thread(s) waiting on you`}
-                    className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-amber-300 border border-amber-500/40"
-                  >
-                    {tab.waiting_on_human}
-                  </span>
-                )}
+                  {tab.waiting_on_human > 0 && (
+                    <span
+                      title={`${tab.waiting_on_human} open thread(s) waiting on you`}
+                      className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-amber-300 border border-amber-500/40"
+                    >
+                      {tab.waiting_on_human}
+                    </span>
+                  )}
 
-                {hasBlueDot && (
-                  <span
-                    title="Unsynced local edits or replies waiting on agent"
-                    className="h-2 w-2 rounded-full bg-sky-400"
-                  />
-                )}
+                  {hasBlueDot && (
+                    <span
+                      title="Unsynced local edits or replies waiting on agent"
+                      className="h-2 w-2 rounded-full bg-sky-400"
+                    />
+                  )}
 
-                {hasRedDot && (
-                  <span
-                    title={`${tab.drifted_count} drifted node(s)`}
-                    className="h-2 w-2 rounded-full bg-rose-500"
-                  />
-                )}
-              </button>
+                  {hasRedDot && (
+                    <span
+                      title={`${tab.drifted_count} drifted node(s)`}
+                      className="h-2 w-2 rounded-full bg-rose-500"
+                    />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setTabMenu({ x: rect.left, y: rect.bottom + 4, tab });
+                  }}
+                  className={`mr-1 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-opacity ${
+                    active ? "opacity-80" : "opacity-0 group-hover:opacity-80"
+                  }`}
+                  title="Tab options"
+                  aria-label={`Tab options for ${tab.title}`}
+                >
+                  <MoreVertical className="h-3 w-3" />
+                </button>
+              </div>
             );
           })}
 
@@ -185,6 +268,103 @@ export function TabBar({
         </nav>
       </header>
 
+      {tabMenu && (
+        <ContextMenu
+          x={tabMenu.x}
+          y={tabMenu.y}
+          header={tabMenu.tab.title}
+          onClose={() => setTabMenu(null)}
+          items={[
+            {
+              id: "open",
+              label: "Switch to Tab",
+              onSelect: () => onSelectView(tabMenu.tab.view_id),
+            },
+            {
+              id: "delete",
+              label: "Delete Tab...",
+              danger: true,
+              dividerBefore: true,
+              onSelect: () => {
+                setConfirmDeleteTab(tabMenu.tab);
+                setConfirmText("");
+              },
+            },
+          ]}
+        />
+      )}
+
+      {confirmDeleteTab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-rose-500/40 bg-slate-900 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2 text-rose-300">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <h2 className="text-sm font-semibold">Delete Tab Permanently</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteTab(null)}
+                className="rounded p-1 text-slate-400 hover:bg-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed mb-3">
+              This will permanently remove{" "}
+              <code className="font-mono text-rose-200">
+                .design/views/{confirmDeleteTab.view_id}.json
+              </code>{" "}
+              and its local layout/checkpoint. Resolved ADR threads stay archived
+              in <code className="font-mono text-slate-400">.design/threads/</code>.
+            </p>
+
+            <form onSubmit={handleConfirmDelete} className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Type{" "}
+                  <span className="font-semibold text-slate-100 select-all">
+                    {confirmDeleteTab.title}
+                  </span>{" "}
+                  (or{" "}
+                  <code className="font-mono text-slate-200 select-all">
+                    {confirmDeleteTab.view_id}
+                  </code>
+                  ) to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={confirmDeleteTab.title}
+                  autoFocus
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-rose-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteTab(null)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!canConfirmDelete || deleting}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {deleting ? "Deleting..." : "Delete Tab"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
@@ -204,17 +384,6 @@ export function TabBar({
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button
                 type="button"
-                onClick={() => setMode("request")}
-                className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                  mode === "request"
-                    ? "border-sky-500 bg-sky-500/15 text-sky-200"
-                    : "border-slate-700 bg-slate-800/50 text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                Request View from Agent
-              </button>
-              <button
-                type="button"
                 onClick={() => setMode("blank")}
                 className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                   mode === "blank"
@@ -224,9 +393,62 @@ export function TabBar({
               >
                 Create Blank View
               </button>
+              <button
+                type="button"
+                onClick={() => setMode("request")}
+                className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                  mode === "request"
+                    ? "border-sky-500 bg-sky-500/15 text-sky-200"
+                    : "border-slate-700 bg-slate-800/50 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Request View from Agent
+              </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Diagram Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDiagramType("general")}
+                    className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                      diagramType === "general"
+                        ? "border-sky-500 bg-sky-500/15 text-sky-100"
+                        : "border-slate-700 bg-slate-950 text-slate-400"
+                    }`}
+                  >
+                    <div className="font-semibold">General Diagram</div>
+                    <div className="text-[10px] text-slate-400">
+                      Classes, flows, architecture
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiagramType("er");
+                      setDirection("LR");
+                    }}
+                    className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                      diagramType === "er"
+                        ? "border-emerald-500 bg-emerald-500/15 text-emerald-100"
+                        : "border-slate-700 bg-slate-950 text-slate-400"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1 font-semibold">
+                      <Database className="h-3 w-3 text-emerald-400" />
+                      ER Diagram
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Entities, PK/FK/null, crow&apos;s foot
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
                   Tab Title
@@ -236,7 +458,11 @@ export function TabBar({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={
-                    mode === "request" ? "e.g. Dataflow" : "e.g. Scratchpad"
+                    diagramType === "er"
+                      ? "e.g. Database Schema"
+                      : mode === "request"
+                        ? "e.g. Dataflow"
+                        : "e.g. Scratchpad"
                   }
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none"
                   autoFocus
@@ -252,7 +478,11 @@ export function TabBar({
                     rows={3}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Show event ingestion, caching, and deduplication stages"
+                    placeholder={
+                      diagramType === "er"
+                        ? "Model tables, foreign keys, and cardinalities for orders & billing"
+                        : "Show event ingestion, caching, and deduplication stages"
+                    }
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none"
                   />
                 </div>

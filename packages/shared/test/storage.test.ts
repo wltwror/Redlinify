@@ -482,4 +482,37 @@ describe("DesignStorage", () => {
     await expect(storage.readView("nonexistent")).rejects.toThrow(NotFoundError);
     await expect(storage.readThread("thr_missing")).rejects.toThrow(NotFoundError);
   });
+
+  it("deletes a view, removes its tab, cleans layout/checkpoint, and preserves threads", async () => {
+    const dir = await makeTempDir();
+    const storage = new DesignStorage(dir);
+    await storage.initWorkspace("DeleteTest");
+
+    await storage.upsertView({ view: sampleClassesView({ id: "v1", title: "View 1" }), actor: "agent" });
+    await storage.upsertView({ view: sampleClassesView({ id: "v2", title: "View 2" }), actor: "agent" });
+    await storage.writeLayout("v1", { positions: { dedup_engine: { x: 1, y: 2 } } });
+    const thr = await storage.postThreadMessage({
+      target_type: "view",
+      view_id: "v1",
+      kind: "decision",
+      author: "agent",
+      body: "Retain ADR even if view removed.",
+      resolve: true,
+      resolution_summary: "Keep historical ADR.",
+    });
+
+    const res = await storage.deleteView("v1");
+    expect(res).toEqual({ deleted: true, view_id: "v1" });
+    expect(await storage.listViewIds()).toEqual(["v2"]);
+    expect((await storage.readWorkspace()).tabs).toEqual([
+      { view_id: "v2", title: "View 2", diagram_type: "general", order: 0 },
+    ]);
+    expect(await storage.readCheckpoint("v1")).toBeNull();
+    expect(await storage.readLayout("v1")).toEqual({ positions: {} });
+    expect((await storage.readThread(thr.id)).resolution_summary).toBe(
+      "Keep historical ADR.",
+    );
+
+    await expect(storage.deleteView("v1")).rejects.toThrow(NotFoundError);
+  });
 });

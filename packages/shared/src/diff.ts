@@ -1,5 +1,11 @@
 import { canonicalEqual } from "./canonical.js";
-import type { BoxSection, DesignEdge, DesignNode, DesignView } from "./schemas.js";
+import type {
+  BoxSection,
+  DesignEdge,
+  DesignNode,
+  DesignView,
+  EntityField,
+} from "./schemas.js";
 
 export interface SectionDiff {
   id: string;
@@ -10,6 +16,12 @@ export interface SectionDiff {
   reordered: boolean;
 }
 
+export interface FieldDiff {
+  id: string;
+  name: string;
+  changes: Record<string, { before: unknown; after: unknown }>;
+}
+
 export interface NodeDiff {
   id: string;
   title: string;
@@ -17,6 +29,9 @@ export interface NodeDiff {
   sections_added: BoxSection[];
   sections_removed: Array<{ id: string; heading: string }>;
   sections_modified: SectionDiff[];
+  fields_added: EntityField[];
+  fields_removed: Array<{ id: string; name: string }>;
+  fields_modified: FieldDiff[];
 }
 
 export interface EdgeDiff {
@@ -31,7 +46,7 @@ export interface SemanticDiff {
   has_changes: boolean;
   baseline_missing: boolean;
   view_meta_changed: Partial<
-    Record<"title" | "direction", { before: string; after: string }>
+    Record<"title" | "direction" | "diagram_type", { before: string; after: string }>
   >;
   nodes_added: DesignNode[];
   nodes_removed: Array<{ id: string; title: string }>;
@@ -112,7 +127,6 @@ function diffSections(
     }
   }
 
-  // Fallback: match remaining sections by unique exact heading so renamed IDs stay clean
   const unmatchedBefore = beforeSections.filter((s) => !matchedBeforeIds.has(s.id));
   const unmatchedAfter = afterSections.filter((s) => !matchedAfterIds.has(s.id));
 
@@ -172,6 +186,84 @@ function diffSections(
   return { sections_added, sections_removed, sections_modified };
 }
 
+function diffFields(
+  beforeFields: EntityField[],
+  afterFields: EntityField[],
+): {
+  fields_added: EntityField[];
+  fields_removed: Array<{ id: string; name: string }>;
+  fields_modified: FieldDiff[];
+} {
+  const afterById = new Map(afterFields.map((f) => [f.id, f]));
+  const matchedBeforeIds = new Set<string>();
+  const matchedAfterIds = new Set<string>();
+  const pairs: Array<{ before: EntityField; after: EntityField }> = [];
+
+  for (const beforeField of beforeFields) {
+    const afterField = afterById.get(beforeField.id);
+    if (afterField) {
+      pairs.push({ before: beforeField, after: afterField });
+      matchedBeforeIds.add(beforeField.id);
+      matchedAfterIds.add(afterField.id);
+    }
+  }
+
+  const unmatchedBefore = beforeFields.filter((f) => !matchedBeforeIds.has(f.id));
+  const unmatchedAfter = afterFields.filter((f) => !matchedAfterIds.has(f.id));
+
+  const beforeNameCounts = new Map<string, number>();
+  for (const f of unmatchedBefore) {
+    beforeNameCounts.set(f.name, (beforeNameCounts.get(f.name) ?? 0) + 1);
+  }
+  const afterNameCounts = new Map<string, number>();
+  for (const f of unmatchedAfter) {
+    afterNameCounts.set(f.name, (afterNameCounts.get(f.name) ?? 0) + 1);
+  }
+
+  for (const beforeField of unmatchedBefore) {
+    if (beforeNameCounts.get(beforeField.name) !== 1) continue;
+    if (afterNameCounts.get(beforeField.name) !== 1) continue;
+    const afterField = unmatchedAfter.find((f) => f.name === beforeField.name);
+    if (afterField) {
+      pairs.push({ before: beforeField, after: afterField });
+      matchedBeforeIds.add(beforeField.id);
+      matchedAfterIds.add(afterField.id);
+    }
+  }
+
+  const fields_added = afterFields.filter((f) => !matchedAfterIds.has(f.id));
+  const fields_removed = beforeFields
+    .filter((f) => !matchedBeforeIds.has(f.id))
+    .map((f) => ({ id: f.id, name: f.name }));
+
+  const fields_modified: FieldDiff[] = [];
+  for (const { before, after } of pairs) {
+    const changes: Record<string, { before: unknown; after: unknown }> = {};
+    for (const key of ["name", "type", "default_value", "note"] as const) {
+      if (!canonicalEqual(before[key], after[key])) {
+        changes[key] = { before: before[key], after: after[key] };
+      }
+    }
+    for (const flag of ["pk", "fk", "unique", "nullable", "indexed"] as const) {
+      const bVal = Boolean(before[flag]);
+      const aVal = Boolean(after[flag]);
+      if (bVal !== aVal) {
+        changes[flag] = { before: bVal, after: aVal };
+      }
+    }
+
+    if (Object.keys(changes).length > 0) {
+      fields_modified.push({
+        id: after.id,
+        name: after.name,
+        changes,
+      });
+    }
+  }
+
+  return { fields_added, fields_removed, fields_modified };
+}
+
 const NODE_SCALAR_FIELDS = [
   "entity_ref",
   "kind",
@@ -196,12 +288,19 @@ function diffNode(beforeNode: DesignNode, afterNode: DesignNode): NodeDiff | nul
     beforeNode.sections,
     afterNode.sections,
   );
+  const { fields_added, fields_removed, fields_modified } = diffFields(
+    beforeNode.fields ?? [],
+    afterNode.fields ?? [],
+  );
 
   if (
     Object.keys(changes).length === 0 &&
     sections_added.length === 0 &&
     sections_removed.length === 0 &&
-    sections_modified.length === 0
+    sections_modified.length === 0 &&
+    fields_added.length === 0 &&
+    fields_removed.length === 0 &&
+    fields_modified.length === 0
   ) {
     return null;
   }
@@ -213,13 +312,25 @@ function diffNode(beforeNode: DesignNode, afterNode: DesignNode): NodeDiff | nul
     sections_added,
     sections_removed,
     sections_modified,
+    fields_added,
+    fields_removed,
+    fields_modified,
   };
 }
 
 function diffEdge(beforeEdge: DesignEdge, afterEdge: DesignEdge): EdgeDiff | null {
   const changes: Record<string, { before: unknown; after: unknown }> = {};
 
-  for (const field of ["source", "target", "label", "step", "style"] as const) {
+  for (const field of [
+    "source",
+    "target",
+    "label",
+    "step",
+    "style",
+    "source_cardinality",
+    "target_cardinality",
+    "relation_kind",
+  ] as const) {
     const beforeVal = beforeEdge[field];
     const afterVal = afterEdge[field];
     if (!canonicalEqual(beforeVal, afterVal)) {
@@ -281,6 +392,14 @@ export function computeSemanticDiff(
     view_meta_changed.direction = {
       before: checkpointView.direction,
       after: currentView.direction,
+    };
+  }
+  const beforeType = checkpointView.diagram_type ?? "general";
+  const afterType = currentView.diagram_type ?? "general";
+  if (beforeType !== afterType) {
+    view_meta_changed.diagram_type = {
+      before: beforeType,
+      after: afterType,
     };
   }
 

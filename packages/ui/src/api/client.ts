@@ -1,6 +1,7 @@
 import type {
   DesignThread,
   DesignView,
+  DiagramType,
   SemanticDiff,
   ThreadKind,
   ThreadTargetType,
@@ -156,11 +157,20 @@ export function deleteViewRequest(requestId: string): Promise<{ deleted: true }>
 export function createBlankView(input: {
   id?: string;
   title: string;
+  diagram_type?: DiagramType;
   direction?: ViewDirection;
 }): Promise<{ view: DesignView; view_hash: string; created: boolean }> {
   return requestJson("/api/views", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function deleteView(
+  viewId: string,
+): Promise<{ deleted: true; view_id: string }> {
+  return requestJson(`/api/views/${encodeURIComponent(viewId)}`, {
+    method: "DELETE",
   });
 }
 

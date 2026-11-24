@@ -9,6 +9,7 @@ import {
   DesignError,
   DesignStorage,
   DesignViewSchema,
+  DiagramTypeSchema,
   EntityRefSchema,
   LockViolationError,
   NotFoundError,
@@ -326,6 +327,7 @@ export async function createWebServer(
             .object({
               id: idSlugSchema("view.id").optional(),
               title: z.string().trim().min(1),
+              diagram_type: DiagramTypeSchema.default("general"),
               direction: ViewDirectionSchema.default("TB"),
             })
             .parse(await readJsonBody(req));
@@ -347,6 +349,7 @@ export async function createWebServer(
             view: {
               id: viewId,
               title: body.title,
+              diagram_type: body.diagram_type,
               direction: body.direction,
               created_by: "human",
               nodes: [],
@@ -363,6 +366,12 @@ export async function createWebServer(
           const viewId = idSlugSchema("view_id").parse(
             decodeURIComponent(viewMatch[1]!),
           );
+          if (method === "DELETE") {
+            markSelfWrite("workspace.json", `views/${viewId}.json`);
+            const deleted = await storage.deleteView(viewId);
+            sendJson(res, 200, deleted);
+            return;
+          }
           if (method === "GET") {
             const [{ view, view_hash }, layout, threads] = await Promise.all([
               storage.readView(viewId),

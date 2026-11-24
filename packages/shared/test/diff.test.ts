@@ -228,4 +228,72 @@ describe("computeSemanticDiff & computeViewHash", () => {
       },
     ]);
   });
+
+  it("diffs ER fields and edge cardinalities cleanly", () => {
+    const before: DesignView = {
+      id: "er",
+      title: "Fleet ER",
+      diagram_type: "er",
+      direction: "LR",
+      nodes: [
+        {
+          id: "vehicle",
+          kind: "Entity",
+          title: "Vehicle",
+          status: "draft",
+          locked: false,
+          sections: [],
+          fields: [
+            { id: "id", name: "id", type: "uuid", pk: true },
+            { id: "vin", name: "vin", type: "varchar", nullable: false },
+          ],
+        },
+        {
+          id: "fleet",
+          kind: "Entity",
+          title: "Fleet",
+          status: "draft",
+          locked: false,
+          sections: [],
+          fields: [{ id: "id", name: "id", type: "uuid", pk: true }],
+        },
+      ],
+      edges: [
+        {
+          id: "e1",
+          source: "fleet",
+          target: "vehicle",
+          source_cardinality: "1",
+          target_cardinality: "0..*",
+          relation_kind: "association",
+        },
+      ],
+    };
+
+    const after = structuredClone(before);
+    after.nodes[0]!.fields![1]!.unique = true;
+    after.nodes[0]!.fields!.push({
+      id: "fleet_id",
+      name: "fleet_id",
+      type: "uuid",
+      fk: true,
+    });
+    after.edges[0]!.target_cardinality = "1..*";
+
+    const diff = computeSemanticDiff(before, after);
+    expect(diff.has_changes).toBe(true);
+    expect(diff.nodes_modified[0]?.fields_added.map((f) => f.id)).toEqual([
+      "fleet_id",
+    ]);
+    expect(diff.nodes_modified[0]?.fields_modified).toEqual([
+      {
+        id: "vin",
+        name: "vin",
+        changes: { unique: { before: false, after: true } },
+      },
+    ]);
+    expect(diff.edges_modified[0]?.changes).toEqual({
+      target_cardinality: { before: "0..*", after: "1..*" },
+    });
+  });
 });

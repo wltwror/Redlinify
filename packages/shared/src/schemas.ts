@@ -23,6 +23,22 @@ export const EntityRefSchema = z
     "entity_ref must be canonical snake_case (lowercase letters, digits, '_')",
   );
 
+export const DiagramTypeSchema = z.enum(["general", "er"]);
+export type DiagramType = z.infer<typeof DiagramTypeSchema>;
+
+export const CardinalitySchema = z.enum(["1", "0..1", "1..*", "0..*"]);
+export type Cardinality = z.infer<typeof CardinalitySchema>;
+
+export const RelationKindSchema = z.enum([
+  "association",
+  "identifying",
+  "subtype",
+]);
+export type RelationKind = z.infer<typeof RelationKindSchema>;
+
+export const HandleSideSchema = z.enum(["top", "right", "bottom", "left"]);
+export type HandleSide = z.infer<typeof HandleSideSchema>;
+
 export const NodeStatusSchema = z.enum([
   "draft",
   "needs_input",
@@ -45,6 +61,20 @@ export const BoxSectionSchema = z.object({
 });
 export type BoxSection = z.infer<typeof BoxSectionSchema>;
 
+export const EntityFieldSchema = z.object({
+  id: idSlugSchema("field.id"),
+  name: z.string().trim().min(1, "field.name is required"),
+  type: z.string().trim().min(1).optional(),
+  pk: z.boolean().optional(),
+  fk: z.boolean().optional(),
+  unique: z.boolean().optional(),
+  nullable: z.boolean().optional(),
+  indexed: z.boolean().optional(),
+  default_value: z.string().optional(),
+  note: z.string().optional(),
+});
+export type EntityField = z.infer<typeof EntityFieldSchema>;
+
 export const DesignNodeSchema = z.object({
   id: idSlugSchema("node.id"),
   entity_ref: EntityRefSchema.optional(),
@@ -54,6 +84,7 @@ export const DesignNodeSchema = z.object({
   status: NodeStatusSchema.default("draft"),
   locked: z.boolean().default(false),
   sections: z.array(BoxSectionSchema).default([]),
+  fields: z.array(EntityFieldSchema).optional(),
   code_refs: z.array(CodeRefSchema).optional(),
 });
 export type DesignNode = z.infer<typeof DesignNodeSchema>;
@@ -69,6 +100,9 @@ export const DesignEdgeSchema = z.object({
   step: z.number().int().positive("edge.step must be a positive integer").optional(),
   style: EdgeStyleSchema.optional(),
   locked: z.boolean().optional(),
+  source_cardinality: CardinalitySchema.optional(),
+  target_cardinality: CardinalitySchema.optional(),
+  relation_kind: RelationKindSchema.optional(),
 });
 export type DesignEdge = z.infer<typeof DesignEdgeSchema>;
 
@@ -82,6 +116,7 @@ export const DesignViewSchema = z
   .object({
     id: idSlugSchema("view.id"),
     title: z.string().trim().min(1, "view.title is required"),
+    diagram_type: DiagramTypeSchema.default("general"),
     direction: ViewDirectionSchema.default("TB"),
     created_by: ActorRoleSchema.optional(),
     nodes: z.array(DesignNodeSchema).default([]),
@@ -109,6 +144,18 @@ export const DesignViewSchema = z
           });
         }
         sectionIds.add(section.id);
+      });
+
+      const fieldIds = new Set<string>();
+      (node.fields ?? []).forEach((field, fieldIdx) => {
+        if (fieldIds.has(field.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["nodes", nodeIdx, "fields", fieldIdx, "id"],
+            message: `Duplicate field id '${field.id}' in node '${node.id}'`,
+          });
+        }
+        fieldIds.add(field.id);
       });
     });
 
@@ -144,6 +191,7 @@ export type DesignView = z.infer<typeof DesignViewSchema>;
 export const WorkspaceTabSchema = z.object({
   view_id: idSlugSchema("tab.view_id"),
   title: z.string().trim().min(1, "tab.title is required"),
+  diagram_type: DiagramTypeSchema.optional(),
   description: z.string().optional(),
   order: z.number().int().nonnegative(),
 });
@@ -258,6 +306,20 @@ export const DesignThreadSchema = z
   });
 export type DesignThread = z.infer<typeof DesignThreadSchema>;
 
+export const EdgeRouteSchema = z.object({
+  source_handle: HandleSideSchema.optional(),
+  target_handle: HandleSideSchema.optional(),
+  waypoints: z
+    .array(
+      z.object({
+        x: z.number().finite(),
+        y: z.number().finite(),
+      }),
+    )
+    .optional(),
+});
+export type EdgeRoute = z.infer<typeof EdgeRouteSchema>;
+
 export const ViewLayoutSchema = z.object({
   positions: z
     .record(
@@ -268,6 +330,7 @@ export const ViewLayoutSchema = z.object({
       }),
     )
     .default({}),
+  edge_routes: z.record(z.string(), EdgeRouteSchema).optional(),
   viewport: z
     .object({
       x: z.number().finite(),
@@ -309,6 +372,7 @@ export const NodeUpdatePatchSchema = z.object({
   locked: z.boolean().optional(),
   sections: z.array(BoxSectionSchema).optional(),
   section_ops: z.array(SectionPatchOpSchema).optional(),
+  fields: z.array(EntityFieldSchema).optional(),
   code_refs: z.array(CodeRefSchema).nullable().optional(),
 });
 export type NodeUpdatePatch = z.infer<typeof NodeUpdatePatchSchema>;
@@ -321,6 +385,9 @@ export const EdgeUpdatePatchSchema = z.object({
   step: z.number().int().positive().nullable().optional(),
   style: EdgeStyleSchema.nullable().optional(),
   locked: z.boolean().nullable().optional(),
+  source_cardinality: CardinalitySchema.nullable().optional(),
+  target_cardinality: CardinalitySchema.nullable().optional(),
+  relation_kind: RelationKindSchema.nullable().optional(),
 });
 export type EdgeUpdatePatch = z.infer<typeof EdgeUpdatePatchSchema>;
 
@@ -329,6 +396,7 @@ export const ViewPatchSchema = z.object({
     .object({
       title: z.string().trim().min(1).optional(),
       direction: ViewDirectionSchema.optional(),
+      diagram_type: DiagramTypeSchema.optional(),
     })
     .optional(),
   add_nodes: z.array(DesignNodeSchema).optional(),

@@ -245,4 +245,32 @@ describe("Redlinify HTTP + WebSocket server", () => {
 
     ws.close();
   });
+
+  it("creates ER views and safely deletes views via DELETE /api/views/:id", async () => {
+    const { storage, server } = await setupServer();
+
+    const createRes = await fetch(`${server.url}/api/views`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Fleet ER",
+        diagram_type: "er",
+        direction: "LR",
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as {
+      view: DesignView;
+      view_hash: string;
+    };
+    expect(created.view.diagram_type).toBe("er");
+    expect(created.view.id).toBe("fleet_er");
+
+    const delRes = await fetch(`${server.url}/api/views/fleet_er`, {
+      method: "DELETE",
+    });
+    expect(delRes.status).toBe(200);
+    expect(await delRes.json()).toEqual({ deleted: true, view_id: "fleet_er" });
+    expect(await storage.listViewIds()).toEqual([]);
+  });
 });

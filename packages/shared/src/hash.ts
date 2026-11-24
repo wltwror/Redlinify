@@ -4,7 +4,7 @@ import {
   canonicalStringify,
   canonicalize,
 } from "./canonical.js";
-import type { DesignEdge, DesignNode, DesignView } from "./schemas.js";
+import type { DesignEdge, DesignNode, DesignView, EntityField } from "./schemas.js";
 
 export { canonicalEqual, canonicalStringify, canonicalize };
 
@@ -13,6 +13,21 @@ export function computeContentHash(value: unknown): string {
     .update(canonicalStringify(value))
     .digest("hex")
     .slice(0, 16);
+}
+
+function normalizeField(field: EntityField): Record<string, unknown> {
+  return {
+    id: field.id,
+    name: field.name,
+    type: field.type,
+    pk: field.pk === true ? true : undefined,
+    fk: field.fk === true ? true : undefined,
+    unique: field.unique === true ? true : undefined,
+    nullable: field.nullable === true ? true : undefined,
+    indexed: field.indexed === true ? true : undefined,
+    default_value: field.default_value,
+    note: field.note,
+  };
 }
 
 function normalizeNode(node: DesignNode): Record<string, unknown> {
@@ -29,6 +44,7 @@ function normalizeNode(node: DesignNode): Record<string, unknown> {
       heading: section.heading,
       items: [...section.items],
     })),
+    fields: node.fields?.map(normalizeField),
     code_refs: node.code_refs,
   };
 }
@@ -42,6 +58,9 @@ function normalizeEdge(edge: DesignEdge): Record<string, unknown> {
     step: edge.step,
     style: edge.style,
     locked: edge.locked === true ? true : undefined,
+    source_cardinality: edge.source_cardinality,
+    target_cardinality: edge.target_cardinality,
+    relation_kind: edge.relation_kind,
   };
 }
 
@@ -61,6 +80,7 @@ export function normalizeViewForHash(view: DesignView): Record<string, unknown> 
   return {
     id: view.id,
     title: view.title,
+    diagram_type: view.diagram_type ?? "general",
     direction: view.direction,
     nodes,
     edges,

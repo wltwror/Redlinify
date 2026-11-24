@@ -225,4 +225,74 @@ describe("schemas", () => {
     });
     expect(patch.update_nodes).toHaveLength(1);
   });
+
+  it("validates ER diagrams, entity fields, cardinalities, and edge_routes", () => {
+    const erView = DesignViewSchema.parse({
+      id: "fleet_er",
+      title: "Fleet ER",
+      diagram_type: "er",
+      direction: "LR",
+      nodes: [
+        {
+          id: "order",
+          kind: "Entity",
+          title: "Order",
+          fields: [
+            { id: "id", name: "id", type: "uuid", pk: true },
+            { id: "note", name: "note", type: "text", nullable: true },
+          ],
+        },
+        {
+          id: "customer",
+          kind: "Entity",
+          title: "Customer",
+          fields: [{ id: "id", name: "id", type: "uuid", pk: true }],
+        },
+      ],
+      edges: [
+        {
+          id: "e_cust_order",
+          source: "customer",
+          target: "order",
+          source_cardinality: "1",
+          target_cardinality: "0..*",
+          relation_kind: "association",
+        },
+      ],
+    });
+
+    expect(erView.diagram_type).toBe("er");
+    expect(erView.nodes[0]?.fields).toHaveLength(2);
+
+    const layoutWithRoutes = ViewLayoutSchema.parse({
+      positions: { order: { x: 100, y: 100 } },
+      edge_routes: {
+        e_cust_order: {
+          source_handle: "right",
+          target_handle: "left",
+          waypoints: [{ x: 250, y: 120 }],
+        },
+      },
+    });
+    expect(layoutWithRoutes.edge_routes?.e_cust_order?.waypoints).toHaveLength(1);
+
+    expect(() =>
+      DesignViewSchema.parse({
+        id: "dup_fields",
+        title: "Bad ER",
+        diagram_type: "er",
+        nodes: [
+          {
+            id: "a",
+            kind: "Entity",
+            title: "A",
+            fields: [
+              { id: "col", name: "col1" },
+              { id: "col", name: "col2" },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/Duplicate field id/);
+  });
 });

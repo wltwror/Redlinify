@@ -1,11 +1,20 @@
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { DesignNode, DesignView, ViewLayout } from "@redlinify/shared/browser";
+import type {
+  DiagramType,
+  DesignNode,
+  DesignView,
+  ViewLayout,
+} from "@redlinify/shared/browser";
 
 const elk = new ELK();
 
 export const MAX_VISIBLE_SECTION_ITEMS = 5;
+export const MAX_VISIBLE_ER_FIELDS = 8;
 
-export function estimateNodeSize(node: DesignNode): {
+export function estimateNodeSize(
+  node: DesignNode,
+  diagramType: DiagramType = "general",
+): {
   width: number;
   height: number;
 } {
@@ -16,26 +25,41 @@ export function estimateNodeSize(node: DesignNode): {
       longestLine = Math.max(longestLine, item.length);
     }
   }
-  const width = Math.min(340, Math.max(280, Math.round(longestLine * 6.5 + 48)));
+  for (const field of (node.fields ?? []).slice(0, MAX_VISIBLE_ER_FIELDS)) {
+    const lineLen =
+      field.name.length + (field.type ? field.type.length + 2 : 0) + 10;
+    longestLine = Math.max(longestLine, lineLen);
+  }
 
-  let height = 50; // top header bar
+  const width = Math.min(350, Math.max(280, Math.round(longestLine * 6.6 + 52)));
+
+  let height = 52; // top header bar
   if (node.summary?.trim()) {
     height += 34;
   }
+
+  const fields = node.fields ?? [];
+  if (diagramType === "er" || fields.length > 0) {
+    const visibleFields = Math.min(fields.length, MAX_VISIBLE_ER_FIELDS);
+    const hasMoreFields = fields.length > MAX_VISIBLE_ER_FIELDS ? 22 : 0;
+    const emptyHint = fields.length === 0 ? 22 : 0;
+    height += 26 + visibleFields * 24 + hasMoreFields + emptyHint + 16;
+  }
+
   for (const section of node.sections) {
     const visibleCount = Math.min(section.items.length, MAX_VISIBLE_SECTION_ITEMS);
     const hasMore = section.items.length > MAX_VISIBLE_SECTION_ITEMS ? 22 : 0;
     const emptyHint = section.items.length === 0 ? 18 : 0;
     height += 26 + visibleCount * 20 + hasMore + emptyHint + 10;
   }
-  if (node.sections.length === 0) {
+  if (node.sections.length === 0 && fields.length === 0 && diagramType !== "er") {
     height += 28;
   }
   if (node.code_refs && node.code_refs.length > 0) {
     height += 26;
   }
 
-  return { width, height: Math.max(96, height + 10) };
+  return { width, height: Math.max(104, height + 12) };
 }
 
 export async function computeAutoLayout(
@@ -51,7 +75,7 @@ export async function computeAutoLayout(
   }
 
   const elkNodes = view.nodes.map((node) => {
-    const est = estimateNodeSize(node);
+    const est = estimateNodeSize(node, view.diagram_type);
     const measured = options?.measured?.[node.id];
     return {
       id: node.id,
@@ -71,9 +95,9 @@ export async function computeAutoLayout(
     layoutOptions: {
       "elk.algorithm": "layered",
       "elk.direction": view.direction === "LR" ? "RIGHT" : "DOWN",
-      "elk.spacing.nodeNode": "64",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "145",
-      "elk.spacing.edgeNode": "40",
+      "elk.spacing.nodeNode": "68",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "148",
+      "elk.spacing.edgeNode": "44",
       "elk.layered.nodePlacement.strategy": "SIMPLE",
       "elk.padding": "[top=24,left=24,bottom=24,right=24]",
     },

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowLeftRight,
   ArrowUp,
   Check,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   ChevronRight,
   Code2,
   Copy,
+  Database,
   ExternalLink,
   Link2,
   Lock,
@@ -25,11 +27,16 @@ import {
   isThreadWaitingOnAgent,
   isThreadWaitingOnHuman,
   type BoxSection,
+  type Cardinality,
   type DesignEdge,
   type DesignNode,
   type DesignThread,
   type DesignView,
+  type EdgeRoute,
+  type EntityField,
+  type HandleSide,
   type NodeStatus,
+  type RelationKind,
   type SemanticDiff,
   type ThreadKind,
   type ThreadTargetType,
@@ -55,6 +62,7 @@ interface InspectorDrawerProps {
   activeView: DesignView | null;
   selectedNode: DesignNode | null;
   selectedEdge: DesignEdge | null;
+  edgeRoute?: EdgeRoute;
   allThreads: DesignThread[];
   viewDiff: SemanticDiff | null;
   pendingFeedback: PendingFeedbackResult;
@@ -63,6 +71,7 @@ interface InspectorDrawerProps {
   onDeleteNode: (nodeId: string) => Promise<void>;
   onSaveEdge: (updated: DesignEdge) => Promise<void>;
   onDeleteEdge: (edgeId: string) => Promise<void>;
+  onUpdateEdgeRoute: (edgeId: string, patch: Partial<EdgeRoute> | null) => void;
   onCreateThread: (input: {
     target_type: ThreadTargetType;
     view_id?: string;
@@ -80,6 +89,7 @@ interface InspectorDrawerProps {
       resolution_summary?: string;
     },
   ) => Promise<void>;
+  onOpenTab: (viewId: string) => void;
   onJumpToTarget: (
     viewId: string | undefined,
     targetType: ThreadTargetType,
@@ -473,6 +483,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
     activeView,
     selectedNode,
     selectedEdge,
+    edgeRoute,
     allThreads,
     viewDiff,
     pendingFeedback,
@@ -481,8 +492,10 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
     onDeleteNode,
     onSaveEdge,
     onDeleteEdge,
+    onUpdateEdgeRoute,
     onCreateThread,
     onReplyThread,
+    onOpenTab,
     onJumpToTarget,
     onNotify,
   } = props;
@@ -751,7 +764,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              View / ADRs
+              ADRs ({allThreads.filter((t) => t.status === "resolved").length})
             </button>
           </div>
         )}
@@ -925,6 +938,250 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                   </p>
                 )}
               </div>
+
+              {/* ER Attributes editor */}
+              {(activeView?.diagram_type === "er" ||
+                (nodeDraft.fields && nodeDraft.fields.length > 0)) && (
+                <div className="space-y-2.5 border-t border-slate-800 pt-3">
+                  <datalist id="redlinify-sql-types">
+                    <option value="uuid" />
+                    <option value="bigint" />
+                    <option value="integer" />
+                    <option value="varchar(255)" />
+                    <option value="text" />
+                    <option value="boolean" />
+                    <option value="timestamptz" />
+                    <option value="date" />
+                    <option value="decimal(10,2)" />
+                    <option value="jsonb" />
+                  </datalist>
+
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+                      <Database className="h-3.5 w-3.5" />
+                      Entity Attributes
+                    </span>
+                    {!nodeDraft.locked && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newField: EntityField = {
+                            id: `fld_${Date.now().toString(36).slice(-5)}`,
+                            name: `col_${(nodeDraft.fields?.length ?? 0) + 1}`,
+                            type: "varchar(255)",
+                            nullable: false,
+                          };
+                          void commitNode({
+                            ...nodeDraft,
+                            fields: [...(nodeDraft.fields ?? []), newField],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add Attribute
+                      </button>
+                    )}
+                  </div>
+
+                  {(nodeDraft.fields ?? []).map((field, fldIdx) => {
+                    const currentFields = nodeDraft.fields ?? [];
+                    const updateField = (patch: Partial<EntityField>) => {
+                      const nextFields = currentFields.map((f, idx) =>
+                        idx === fldIdx ? { ...f, ...patch } : f,
+                      );
+                      void commitNode({ ...nodeDraft, fields: nextFields });
+                    };
+                    return (
+                      <div
+                        key={field.id}
+                        className="rounded-lg border border-slate-800 bg-slate-950/60 p-2 space-y-1.5"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={field.name}
+                            disabled={nodeDraft.locked}
+                            onChange={(e) => {
+                              const nextFields = [...currentFields];
+                              nextFields[fldIdx] = {
+                                ...field,
+                                name: e.target.value,
+                              };
+                              setNodeDraft({ ...nodeDraft, fields: nextFields });
+                            }}
+                            onBlur={() => {
+                              if (field.name.trim()) {
+                                void commitNode(nodeDraft);
+                              }
+                            }}
+                            placeholder="column_name"
+                            className="flex-1 min-w-0 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-100 disabled:opacity-50 focus:border-sky-500 focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            list="redlinify-sql-types"
+                            value={field.type ?? ""}
+                            disabled={nodeDraft.locked}
+                            onChange={(e) => {
+                              const nextFields = [...currentFields];
+                              const val = e.target.value;
+                              const nextField = { ...field };
+                              if (val) nextField.type = val;
+                              else delete nextField.type;
+                              nextFields[fldIdx] = nextField;
+                              setNodeDraft({ ...nodeDraft, fields: nextFields });
+                            }}
+                            onBlur={() => {
+                              const cleaned = field.type?.trim();
+                              const nextFields = [...currentFields];
+                              const nextField = { ...field };
+                              if (cleaned) nextField.type = cleaned;
+                              else delete nextField.type;
+                              nextFields[fldIdx] = nextField;
+                              void commitNode({
+                                ...nodeDraft,
+                                fields: nextFields,
+                              });
+                            }}
+                            placeholder="type"
+                            className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-300 disabled:opacity-50 focus:border-sky-500 focus:outline-none"
+                          />
+                          {!nodeDraft.locked && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextFields = currentFields.filter(
+                                  (_, idx) => idx !== fldIdx,
+                                );
+                                void commitNode({
+                                  ...nodeDraft,
+                                  fields: nextFields,
+                                });
+                              }}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-rose-400"
+                              title="Remove attribute"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <button
+                              type="button"
+                              disabled={nodeDraft.locked}
+                              onClick={() =>
+                                updateField({ nullable: !field.nullable })
+                              }
+                              title="Toggle Mandatory (*) vs Nullable (○)"
+                              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                field.nullable
+                                  ? "border-slate-700 bg-slate-900 text-slate-400"
+                                  : "border-rose-500/40 bg-rose-500/15 text-rose-300"
+                              }`}
+                            >
+                              {field.nullable ? "○ NULL" : "* REQ"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={nodeDraft.locked}
+                              onClick={() => updateField({ pk: !field.pk })}
+                              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                field.pk
+                                  ? "border-amber-500/40 bg-amber-500/20 text-amber-300"
+                                  : "border-slate-800 bg-slate-900 text-slate-500"
+                              }`}
+                            >
+                              PK
+                            </button>
+                            <button
+                              type="button"
+                              disabled={nodeDraft.locked}
+                              onClick={() => updateField({ fk: !field.fk })}
+                              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                field.fk
+                                  ? "border-sky-500/40 bg-sky-500/20 text-sky-300"
+                                  : "border-slate-800 bg-slate-900 text-slate-500"
+                              }`}
+                            >
+                              FK
+                            </button>
+                            <button
+                              type="button"
+                              disabled={nodeDraft.locked}
+                              onClick={() =>
+                                updateField({ unique: !field.unique })
+                              }
+                              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                field.unique
+                                  ? "border-violet-500/40 bg-violet-500/20 text-violet-300"
+                                  : "border-slate-800 bg-slate-900 text-slate-500"
+                              }`}
+                            >
+                              UQ
+                            </button>
+                            <button
+                              type="button"
+                              disabled={nodeDraft.locked}
+                              onClick={() =>
+                                updateField({ indexed: !field.indexed })
+                              }
+                              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                field.indexed
+                                  ? "border-slate-500/50 bg-slate-700/50 text-slate-200"
+                                  : "border-slate-800 bg-slate-900 text-slate-500"
+                              }`}
+                            >
+                              IDX
+                            </button>
+                          </div>
+
+                          {!nodeDraft.locked && (
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                disabled={fldIdx === 0}
+                                onClick={() => {
+                                  const nextFields = [...currentFields];
+                                  const [moved] = nextFields.splice(fldIdx, 1);
+                                  if (!moved) return;
+                                  nextFields.splice(fldIdx - 1, 0, moved);
+                                  void commitNode({
+                                    ...nodeDraft,
+                                    fields: nextFields,
+                                  });
+                                }}
+                                className="rounded p-1 text-slate-500 hover:bg-slate-800 disabled:opacity-30"
+                              >
+                                <ArrowUp className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={fldIdx === currentFields.length - 1}
+                                onClick={() => {
+                                  const nextFields = [...currentFields];
+                                  const [moved] = nextFields.splice(fldIdx, 1);
+                                  if (!moved) return;
+                                  nextFields.splice(fldIdx + 1, 0, moved);
+                                  void commitNode({
+                                    ...nodeDraft,
+                                    fields: nextFields,
+                                  });
+                                }}
+                                className="rounded p-1 text-slate-500 hover:bg-slate-800 disabled:opacity-30"
+                              >
+                                <ArrowDown className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Sections editor */}
               <div className="space-y-2.5 border-t border-slate-800 pt-3">
@@ -1347,6 +1604,171 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                 </div>
               </div>
 
+              {(activeView?.diagram_type === "er" ||
+                edgeDraft.source_cardinality ||
+                edgeDraft.target_cardinality ||
+                edgeDraft.relation_kind) && (
+                <div className="space-y-2.5 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  <div className="text-xs font-semibold text-emerald-300">
+                    ER Relationship
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Kind
+                    </label>
+                    <select
+                      value={edgeDraft.relation_kind ?? "association"}
+                      disabled={Boolean(edgeDraft.locked)}
+                      onChange={(e) =>
+                        void commitEdge({
+                          ...edgeDraft,
+                          relation_kind: e.target.value as RelationKind,
+                        })
+                      }
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-50"
+                    >
+                      <option value="association">Association (FK)</option>
+                      <option value="identifying">Identifying (PK+FK)</option>
+                      <option value="subtype">Subtype (is-a)</option>
+                    </select>
+                  </div>
+
+                  {edgeDraft.relation_kind !== "subtype" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">
+                          Source ({edgeDraft.source})
+                        </label>
+                        <select
+                          value={edgeDraft.source_cardinality ?? "1"}
+                          disabled={Boolean(edgeDraft.locked)}
+                          onChange={(e) =>
+                            void commitEdge({
+                              ...edgeDraft,
+                              source_cardinality: e.target.value as Cardinality,
+                            })
+                          }
+                          className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-50"
+                        >
+                          <option value="1">1 (mandatory)</option>
+                          <option value="0..1">0..1 (optional)</option>
+                          <option value="1..*">1..* (many mand.)</option>
+                          <option value="0..*">0..* (many opt.)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">
+                          Target ({edgeDraft.target})
+                        </label>
+                        <select
+                          value={edgeDraft.target_cardinality ?? "0..*"}
+                          disabled={Boolean(edgeDraft.locked)}
+                          onChange={(e) =>
+                            void commitEdge({
+                              ...edgeDraft,
+                              target_cardinality: e.target.value as Cardinality,
+                            })
+                          }
+                          className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 disabled:opacity-50"
+                        >
+                          <option value="1">1 (mandatory)</option>
+                          <option value="0..1">0..1 (optional)</option>
+                          <option value="1..*">1..* (many mand.)</option>
+                          <option value="0..*">0..* (many opt.)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Edge Routing & Flip */}
+              <div className="space-y-2.5 rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200">
+                    Line Routing
+                  </span>
+                  <button
+                    type="button"
+                    disabled={Boolean(edgeDraft.locked)}
+                    onClick={() =>
+                      void commitEdge({
+                        ...edgeDraft,
+                        source: edgeDraft.target,
+                        target: edgeDraft.source,
+                        source_cardinality: edgeDraft.target_cardinality,
+                        target_cardinality: edgeDraft.source_cardinality,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+                  >
+                    <ArrowLeftRight className="h-3 w-3" />
+                    Flip A ↔ B
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Source Side
+                    </label>
+                    <select
+                      value={edgeRoute?.source_handle ?? ""}
+                      onChange={(e) =>
+                        onUpdateEdgeRoute(edgeDraft.id, {
+                          source_handle: e.target.value
+                            ? (e.target.value as HandleSide)
+                            : undefined,
+                        })
+                      }
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+                    >
+                      <option value="">Auto</option>
+                      <option value="top">Top</option>
+                      <option value="right">Right</option>
+                      <option value="bottom">Bottom</option>
+                      <option value="left">Left</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Target Side
+                    </label>
+                    <select
+                      value={edgeRoute?.target_handle ?? ""}
+                      onChange={(e) =>
+                        onUpdateEdgeRoute(edgeDraft.id, {
+                          target_handle: e.target.value
+                            ? (e.target.value as HandleSide)
+                            : undefined,
+                        })
+                      }
+                      className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+                    >
+                      <option value="">Auto</option>
+                      <option value="top">Top</option>
+                      <option value="right">Right</option>
+                      <option value="bottom">Bottom</option>
+                      <option value="left">Left</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    Bend points: {edgeRoute?.waypoints?.length ?? 0} (or drag on
+                    canvas)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateEdgeRoute(edgeDraft.id, null)}
+                    className="text-sky-400 hover:underline"
+                  >
+                    Reset Route
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="button"
                 disabled={Boolean(edgeDraft.locked)}
@@ -1411,7 +1833,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                         </span>
                         <button
                           type="button"
-                          onClick={() => onJumpToTarget(view_id, "view")}
+                          onClick={() => onOpenTab(view_id)}
                           className="text-[11px] text-sky-400 hover:underline"
                         >
                           Open tab
@@ -1522,25 +1944,93 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
             </div>
           )}
 
-          {/* WORKSPACE TRIAGE: VIEW / WORKSPACE / ORPHAN ADRs */}
+          {/* WORKSPACE TRIAGE: ADRs & VIEW/WORKSPACE THREADS */}
           {mode === "workspace" && workspaceTab === "adrs" && (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300 flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-sky-400 shrink-0" />
-                <span>
-                  Workspace, view-level, and orphaned threads from deleted nodes
-                  are preserved here.
-                </span>
+            <div className="space-y-4">
+              <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 space-y-1.5 text-[11px] text-slate-300 leading-relaxed">
+                <div className="font-semibold text-slate-100 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  How Threads &amp; ADRs Work
+                </div>
+                <p>
+                  • <strong className="text-amber-300">Question:</strong> asks
+                  for clarification before locking a design.
+                </p>
+                <p>
+                  • <strong className="text-sky-300">Change Request:</strong>{" "}
+                  requests the agent to modify a box/edge/view.
+                </p>
+                <p>
+                  • <strong className="text-emerald-300">Decision (ADR):</strong>{" "}
+                  resolved threads graduate into persistent{" "}
+                  <strong>Architecture Decision Records</strong> so future agent
+                  iterations remember <em>why</em> choices were made.
+                </p>
               </div>
-              <ThreadPanel
-                threads={viewOrOrphanThreads}
-                targetType={activeView ? "view" : "workspace"}
-                viewId={activeView?.id}
-                onCreateThread={onCreateThread}
-                onReplyThread={onReplyThread}
-                onJumpToTarget={onJumpToTarget}
-                showJumpLinks
-              />
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-emerald-300">
+                  Resolved Decisions (ADRs) Across Project
+                </div>
+                {allThreads.filter((t) => t.status === "resolved").length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No resolved ADRs yet. Resolve any thread to record a
+                    decision here.
+                  </p>
+                ) : (
+                  allThreads
+                    .filter((t) => t.status === "resolved")
+                    .map((t) => (
+                      <div
+                        key={t.id}
+                        className="rounded-lg border border-slate-800 bg-slate-950/60 p-2.5 space-y-1.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-xs font-medium text-emerald-200">
+                            {t.resolution_summary ??
+                              t.messages[t.messages.length - 1]?.body}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onJumpToTarget(
+                                t.view_id,
+                                t.target_type,
+                                t.target_id,
+                                "threads",
+                              )
+                            }
+                            className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-slate-800"
+                          >
+                            <ExternalLink className="h-2.5 w-2.5" />
+                            Jump
+                          </button>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500">
+                          {t.view_id ?? "workspace"}
+                          {t.target_id ? ` / ${t.target_id}` : ""} •{" "}
+                          {t.messages.length} msg(s)
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 space-y-2">
+                <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <MessageSquare className="h-3.5 w-3.5 text-sky-400" />
+                  View, Workspace &amp; Orphaned Threads
+                </div>
+                <ThreadPanel
+                  threads={viewOrOrphanThreads}
+                  targetType={activeView ? "view" : "workspace"}
+                  viewId={activeView?.id}
+                  onCreateThread={onCreateThread}
+                  onReplyThread={onReplyThread}
+                  onJumpToTarget={onJumpToTarget}
+                  showJumpLinks
+                />
+              </div>
             </div>
           )}
         </div>

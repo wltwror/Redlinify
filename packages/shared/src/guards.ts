@@ -24,6 +24,7 @@ const LOCKED_NODE_SPEC_FIELDS = [
   "title",
   "summary",
   "sections",
+  "fields",
 ] as const;
 
 const LOCKED_NODE_STATUS_FIELDS = ["status", "code_refs"] as const;
@@ -34,6 +35,9 @@ const LOCKED_EDGE_FIELDS = [
   "label",
   "step",
   "style",
+  "source_cardinality",
+  "target_cardinality",
+  "relation_kind",
 ] as const;
 
 /**
@@ -265,6 +269,10 @@ function applyNodeUpdate(node: DesignNode, patch: NodeUpdatePatch): DesignNode {
     next.sections = applySectionOps(next.sections, patch.section_ops, node.id);
   }
 
+  if (patch.fields !== undefined) {
+    next.fields = structuredClone(patch.fields);
+  }
+
   if (patch.code_refs === null) {
     delete next.code_refs;
   } else if (patch.code_refs !== undefined) {
@@ -299,6 +307,9 @@ export function applyViewPatch(
   }
   if (patch.meta?.direction !== undefined) {
     next.direction = patch.meta.direction;
+  }
+  if (patch.meta?.diagram_type !== undefined) {
+    next.diagram_type = patch.meta.diagram_type;
   }
 
   const explicitRemovedEdgeIds = new Set(patch.remove_edges ?? []);
@@ -420,6 +431,20 @@ export function applyViewPatch(
 
       if (edgePatch.locked === null) delete updated.locked;
       else if (edgePatch.locked !== undefined) updated.locked = edgePatch.locked;
+
+      if (edgePatch.source_cardinality === null)
+        delete updated.source_cardinality;
+      else if (edgePatch.source_cardinality !== undefined)
+        updated.source_cardinality = edgePatch.source_cardinality;
+
+      if (edgePatch.target_cardinality === null)
+        delete updated.target_cardinality;
+      else if (edgePatch.target_cardinality !== undefined)
+        updated.target_cardinality = edgePatch.target_cardinality;
+
+      if (edgePatch.relation_kind === null) delete updated.relation_kind;
+      else if (edgePatch.relation_kind !== undefined)
+        updated.relation_kind = edgePatch.relation_kind;
 
       next.edges[idx] = updated;
     }

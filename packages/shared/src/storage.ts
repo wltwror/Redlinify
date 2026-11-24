@@ -682,6 +682,7 @@ export class DesignStorage {
       const existingTab = ws.tabs.find((t) => t.view_id === nextView.id);
       if (existingTab) {
         existingTab.title = nextView.title;
+        existingTab.diagram_type = nextView.diagram_type;
       } else {
         const maxOrder = ws.tabs.reduce(
           (max, t) => Math.max(max, t.order),
@@ -690,6 +691,7 @@ export class DesignStorage {
         ws.tabs.push({
           view_id: nextView.id,
           title: nextView.title,
+          diagram_type: nextView.diagram_type,
           order: maxOrder + 1,
         });
       }
@@ -742,11 +744,16 @@ export class DesignStorage {
 
       await writeJsonAtomic(this.viewPath(validId), nextView);
 
-      if (nextView.title !== existingView.title && (await pathExists(this.workspacePath))) {
+      if (
+        (nextView.title !== existingView.title ||
+          nextView.diagram_type !== existingView.diagram_type) &&
+        (await pathExists(this.workspacePath))
+      ) {
         const ws = await this.readWorkspaceUnlocked();
         const tab = ws.tabs.find((t) => t.view_id === validId);
         if (tab) {
           tab.title = nextView.title;
+          tab.diagram_type = nextView.diagram_type;
           await writeJsonAtomic(this.workspacePath, ws);
         }
       }
@@ -759,6 +766,38 @@ export class DesignStorage {
         view: nextView,
         view_hash: computeViewHash(nextView),
       };
+    });
+  }
+
+  async deleteView(
+    viewId: string,
+  ): Promise<{ deleted: true; view_id: string }> {
+    const validId = idSlugSchema("view_id").parse(viewId);
+
+    return this.withLock(async () => {
+      const filePath = this.viewPath(validId);
+      if (!(await pathExists(filePath))) {
+        throw new NotFoundError(`View '${validId}' not found`);
+      }
+
+      await fs.unlink(filePath);
+      await fs.unlink(this.layoutPath(validId)).catch((err) => {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      });
+      await fs.unlink(this.checkpointPath(validId)).catch((err) => {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      });
+
+      if (await pathExists(this.workspacePath)) {
+        const ws = await this.readWorkspaceUnlocked();
+        ws.tabs = ws.tabs
+          .filter((t) => t.view_id !== validId)
+          .sort((a, b) => a.order - b.order)
+          .map((t, idx) => ({ ...t, order: idx }));
+        await writeJsonAtomic(this.workspacePath, ws);
+      }
+
+      return { deleted: true, view_id: validId };
     });
   }
 

@@ -3,11 +3,13 @@ import {
   Bell,
   LayoutGrid,
   Plus,
+  Redo2,
   Sparkles,
+  Undo2,
   Wifi,
   WifiOff,
 } from "lucide-react";
-import type { ViewDirection } from "@redlinify/shared/browser";
+import type { DiagramType, ViewDirection } from "@redlinify/shared/browser";
 
 export type TriageFilter =
   | "all"
@@ -20,10 +22,15 @@ interface TriageBarProps {
   filter: TriageFilter;
   onChangeFilter: (next: TriageFilter) => void;
   hasActiveView: boolean;
+  diagramType: DiagramType;
   direction: ViewDirection;
   onToggleDirection: () => void;
   onAddBox: () => void;
   onAutoLayout: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   openQuestionsCount: number;
   pendingAgentCount: number;
   onOpenQuestions: () => void;
@@ -43,10 +50,15 @@ export function TriageBar({
   filter,
   onChangeFilter,
   hasActiveView,
+  diagramType,
   direction,
   onToggleDirection,
   onAddBox,
   onAutoLayout,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   openQuestionsCount,
   pendingAgentCount,
   onOpenQuestions,
@@ -84,8 +96,32 @@ export function TriageBar({
               className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-100 hover:bg-slate-700 transition-colors"
             >
               <Plus className="h-3 w-3 text-sky-400" />
-              Add Box
+              {diagramType === "er" ? "Add Entity" : "Add Box"}
             </button>
+
+            <div className="flex items-center rounded-md border border-slate-700 bg-slate-800/70 overflow-hidden">
+              <button
+                type="button"
+                disabled={!canUndo}
+                onClick={onUndo}
+                title="Undo (Ctrl+Z)"
+                aria-label="Undo"
+                className="px-1.5 py-1 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                <Undo2 className="h-3 w-3" />
+              </button>
+              <div className="h-3.5 w-px bg-slate-700" />
+              <button
+                type="button"
+                disabled={!canRedo}
+                onClick={onRedo}
+                title="Redo (Ctrl+Shift+Z)"
+                aria-label="Redo"
+                className="px-1.5 py-1 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none"
+              >
+                <Redo2 className="h-3 w-3" />
+              </button>
+            </div>
 
             <button
               type="button"
@@ -100,7 +136,7 @@ export function TriageBar({
             <button
               type="button"
               onClick={onAutoLayout}
-              title="Reset manual positions and run ELK auto-layout"
+              title="Reset manual positions & routes and run ELK auto-layout"
               className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/70 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 transition-colors"
             >
               <LayoutGrid className="h-3 w-3 text-slate-400" />

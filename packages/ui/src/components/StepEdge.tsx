@@ -1,19 +1,220 @@
+import { useEffect, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
+  Position,
   getSmoothStepPath,
+  useReactFlow,
   type Edge,
   type EdgeProps,
 } from "@xyflow/react";
 import { Lock } from "lucide-react";
-import type { DesignEdge } from "@redlinify/shared/browser";
+import type {
+  Cardinality,
+  DesignEdge,
+  DiagramType,
+} from "@redlinify/shared/browser";
+import type { Point } from "../layout/routing";
 
 export interface StepEdgeData extends Record<string, unknown> {
   edge: DesignEdge;
+  diagramType: DiagramType;
   dimmed?: boolean;
+  manualWaypoints?: Point[];
+  autoWaypoints?: Point[];
+  curveOffset?: Point;
+  onCommitWaypoints?: (edgeId: string, waypoints: Point[]) => void;
 }
 
 export type StepFlowEdge = Edge<StepEdgeData, "step">;
+
+function buildRoundedPolylinePath(points: Point[], radius = 12): string {
+  if (points.length < 2) return "";
+  if (points.length === 2) {
+    return `M ${points[0]!.x} ${points[0]!.y} L ${points[1]!.x} ${points[1]!.y}`;
+  }
+
+  let d = `M ${points[0]!.x} ${points[0]!.y}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1]!;
+    const curr = points[i]!;
+    const next = points[i + 1]!;
+
+    const d1x = curr.x - prev.x;
+    const d1y = curr.y - prev.y;
+    const len1 = Math.hypot(d1x, d1y);
+
+    const d2x = next.x - curr.x;
+    const d2y = next.y - curr.y;
+    const len2 = Math.hypot(d2x, d2y);
+
+    if (len1 < 1 || len2 < 1) {
+      d += ` L ${curr.x} ${curr.y}`;
+      continue;
+    }
+
+    const r = Math.min(radius, len1 * 0.4, len2 * 0.4);
+    const pInX = curr.x - (d1x / len1) * r;
+    const pInY = curr.y - (d1y / len1) * r;
+    const pOutX = curr.x + (d2x / len2) * r;
+    const pOutY = curr.y + (d2y / len2) * r;
+
+    d += ` L ${pInX} ${pInY} Q ${curr.x} ${curr.y} ${pOutX} ${pOutY}`;
+  }
+
+  const last = points[points.length - 1]!;
+  d += ` L ${last.x} ${last.y}`;
+  return d;
+}
+
+function getHandleOutwardVector(position: Position): Point {
+  switch (position) {
+    case Position.Right:
+      return { x: 1, y: 0 };
+    case Position.Left:
+      return { x: -1, y: 0 };
+    case Position.Bottom:
+      return { x: 0, y: 1 };
+    case Position.Top:
+      return { x: 0, y: -1 };
+  }
+}
+
+function isMandatoryCardinality(c?: Cardinality): boolean {
+  return c === "1" || c === "1..*";
+}
+
+function isOptionalCardinality(c?: Cardinality): boolean {
+  return c === "0..1" || c === "0..*";
+}
+
+function CrowsFootEnd({
+  anchor,
+  outward,
+  cardinality,
+  color,
+  strokeWidth,
+}: {
+  anchor: Point;
+  outward: Point;
+  cardinality: Cardinality;
+  color: string;
+  strokeWidth: number;
+}) {
+  const px = -outward.y;
+  const py = outward.x;
+  const pt = (d: number, perp: number) => ({
+    x: anchor.x + outward.x * d + px * perp,
+    y: anchor.y + outward.y * d + py * perp,
+  });
+
+  const isMany = cardinality === "1..*" || cardinality === "0..*";
+  const isOpt = cardinality === "0..1" || cardinality === "0..*";
+
+  const barDist = isMany ? 14 : 9;
+  const b1 = pt(barDist, -6);
+  const b2 = pt(barDist, 6);
+  const circleCenter = pt(isMany ? 18 : 16, 0);
+
+  const fTop = pt(0, -7);
+  const fBot = pt(0, 7);
+  const fApex = pt(12, 0);
+
+  return (
+    <g pointerEvents="none">
+      {isMany ? (
+        <>
+          <line
+            x1={fApex.x}
+            y1={fApex.y}
+            x2={fTop.x}
+            y2={fTop.y}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+          <line
+            x1={fApex.x}
+            y1={fApex.y}
+            x2={fBot.x}
+            y2={fBot.y}
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+        </>
+      ) : (
+        <line
+          x1={b1.x}
+          y1={b1.y}
+          x2={b2.x}
+          y2={b2.y}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+      )}
+
+      {!isOpt && isMany && (
+        <line
+          x1={b1.x}
+          y1={b1.y}
+          x2={b2.x}
+          y2={b2.y}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+      )}
+
+      {isOpt && (
+        <circle
+          cx={circleCenter.x}
+          cy={circleCenter.y}
+          r={4}
+          fill="#020617"
+          stroke={color}
+          strokeWidth={strokeWidth}
+        />
+      )}
+    </g>
+  );
+}
+
+function SubtypeTriangle({
+  anchor,
+  outward,
+  color,
+  strokeWidth,
+}: {
+  anchor: Point;
+  outward: Point;
+  color: string;
+  strokeWidth: number;
+}) {
+  const px = -outward.y;
+  const py = outward.x;
+  const tip = anchor;
+  const left = {
+    x: anchor.x + outward.x * 13 + px * 7,
+    y: anchor.y + outward.y * 13 + py * 7,
+  };
+  const right = {
+    x: anchor.x + outward.x * 13 - px * 7,
+    y: anchor.y + outward.y * 13 - py * 7,
+  };
+
+  return (
+    <polygon
+      points={`${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`}
+      fill="#020617"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinejoin="round"
+      pointerEvents="none"
+    />
+  );
+}
 
 export function StepEdge({
   id,
@@ -27,37 +228,279 @@ export function StepEdge({
   selected,
   markerEnd,
 }: EdgeProps<StepFlowEdge>) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 12,
-  });
-
+  const { screenToFlowPosition } = useReactFlow();
   const designEdge = data?.edge;
-  const isDashed = designEdge?.style === "dashed";
-  const hasLabel = Boolean(designEdge?.label?.trim()) || designEdge?.step !== undefined || designEdge?.locked;
+  const diagramType = data?.diagramType ?? "general";
+  const isEr =
+    diagramType === "er" ||
+    Boolean(
+      designEdge?.source_cardinality ||
+        designEdge?.target_cardinality ||
+        designEdge?.relation_kind,
+    );
+
+  const savedManual = data?.manualWaypoints ?? [];
+  const [dragWaypoints, setDragWaypoints] = useState<Point[] | null>(null);
+
+  useEffect(() => {
+    setDragWaypoints(null);
+  }, [savedManual]);
+
+  const activeManual = dragWaypoints ?? savedManual;
+  const autoWaypoints = data?.autoWaypoints ?? [];
+  const curveOffset = data?.curveOffset ?? { x: 0, y: 0 };
+
+  let edgePath = "";
+  let labelX = (sourceX + targetX) / 2;
+  let labelY = (sourceY + targetY) / 2;
+  let bendKnob: Point = { x: labelX, y: labelY };
+
+  if (activeManual.length > 0) {
+    const pts = [
+      { x: sourceX, y: sourceY },
+      ...activeManual,
+      { x: targetX, y: targetY },
+    ];
+    edgePath = buildRoundedPolylinePath(pts, 12);
+    const midIdx = Math.floor(activeManual.length / 2);
+    const wp = activeManual[midIdx]!;
+    labelX = wp.x;
+    labelY = wp.y;
+    bendKnob = wp;
+  } else if (autoWaypoints.length > 0) {
+    const pts = [
+      { x: sourceX, y: sourceY },
+      ...autoWaypoints,
+      { x: targetX, y: targetY },
+    ];
+    edgePath = buildRoundedPolylinePath(pts, 14);
+    if (autoWaypoints.length >= 2) {
+      const a = autoWaypoints[0]!;
+      const b = autoWaypoints[1]!;
+      labelX = (a.x + b.x) / 2;
+      labelY = (a.y + b.y) / 2;
+    } else {
+      labelX = autoWaypoints[0]!.x;
+      labelY = autoWaypoints[0]!.y;
+    }
+    bendKnob = { x: labelX, y: labelY };
+  } else if (curveOffset.x !== 0 || curveOffset.y !== 0) {
+    const cx = (sourceX + targetX) / 2 + curveOffset.x;
+    const cy = (sourceY + targetY) / 2 + curveOffset.y;
+    edgePath = `M ${sourceX} ${sourceY} Q ${cx} ${cy} ${targetX} ${targetY}`;
+    labelX = 0.25 * sourceX + 0.5 * cx + 0.25 * targetX;
+    labelY = 0.25 * sourceY + 0.5 * cy + 0.25 * targetY;
+    bendKnob = { x: labelX, y: labelY };
+  } else {
+    const [path, lx, ly] = getSmoothStepPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+      borderRadius: 12,
+    });
+    edgePath = path;
+    labelX = lx;
+    labelY = ly;
+    bendKnob = { x: lx, y: ly };
+  }
+
+  const startWaypointDrag = (
+    e: React.PointerEvent,
+    waypointIdx: number | "new",
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const initialList =
+      waypointIdx === "new" ? [{ x: bendKnob.x, y: bendKnob.y }] : [...activeManual];
+    const targetIdx = waypointIdx === "new" ? 0 : waypointIdx;
+    let latest = initialList;
+
+    const onMove = (moveEvt: PointerEvent) => {
+      const flowPt = screenToFlowPosition({
+        x: moveEvt.clientX,
+        y: moveEvt.clientY,
+      });
+      latest = initialList.map((pt, i) =>
+        i === targetIdx
+          ? { x: Math.round(flowPt.x), y: Math.round(flowPt.y) }
+          : pt,
+      );
+      setDragWaypoints(latest);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      data?.onCommitWaypoints?.(id, latest);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const strokeColor = selected
+    ? "#38bdf8"
+    : designEdge?.locked
+      ? "#f59e0b"
+      : "#64748b";
+  const strokeWidth = selected ? 2.5 : 1.75;
+
+  const srcCard = designEdge?.source_cardinality;
+  const tgtCard = designEdge?.target_cardinality;
+  const relKind = designEdge?.relation_kind ?? "association";
+
+  // Barker half-dashed / half-solid rendering for ER relationships
+  const srcOpt = isOptionalCardinality(srcCard);
+  const tgtOpt = isOptionalCardinality(tgtCard);
+  const srcMand = isMandatoryCardinality(srcCard);
+  const tgtMand = isMandatoryCardinality(tgtCard);
+  const useSplitDash =
+    isEr &&
+    relKind === "association" &&
+    ((srcMand && tgtOpt) || (srcOpt && tgtMand));
+  const fullDashed =
+    designEdge?.style === "dashed" ||
+    (isEr && relKind === "association" && srcOpt && tgtOpt && !useSplitDash);
+
+  const labelText =
+    designEdge?.label?.trim() ||
+    (relKind === "subtype" ? "is-a" : "");
+  const hasLabel =
+    Boolean(labelText) ||
+    designEdge?.step !== undefined ||
+    Boolean(designEdge?.locked);
+
+  const opacity = data?.dimmed ? 0.2 : 1;
 
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        markerEnd={markerEnd}
-        style={{
-          stroke: selected
-            ? "#38bdf8"
-            : designEdge?.locked
-              ? "#f59e0b"
-              : "#64748b",
-          strokeWidth: selected ? 2.5 : 1.75,
-          strokeDasharray: isDashed ? "6 4" : undefined,
-          opacity: data?.dimmed ? 0.2 : 1,
-        }}
+      {/* Invisible wide hit-area so clicking/right-clicking edges is effortless */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={18}
+        className="react-flow__edge-interaction"
       />
+
+      {useSplitDash ? (
+        <g style={{ opacity }}>
+          <path
+            d={edgePath}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeDasharray="6 4"
+            className="react-flow__edge-path"
+          />
+          <path
+            d={edgePath}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            pathLength={100}
+            strokeDasharray="50 100"
+            strokeDashoffset={srcMand ? 0 : -50}
+            pointerEvents="none"
+          />
+        </g>
+      ) : (
+        <BaseEdge
+          id={id}
+          path={edgePath}
+          markerEnd={isEr ? undefined : markerEnd}
+          style={{
+            stroke: strokeColor,
+            strokeWidth,
+            strokeDasharray: fullDashed ? "6 4" : undefined,
+            opacity,
+          }}
+        />
+      )}
+
+      {/* ER End Symbols (Crow's foot / Subtype triangle) */}
+      {isEr && relKind === "subtype" && (
+        <g style={{ opacity }}>
+          <SubtypeTriangle
+            anchor={{ x: targetX, y: targetY }}
+            outward={getHandleOutwardVector(targetPosition)}
+            color={strokeColor}
+            strokeWidth={strokeWidth}
+          />
+        </g>
+      )}
+      {isEr && relKind !== "subtype" && (srcCard || tgtCard) && (
+        <g style={{ opacity }}>
+          {srcCard && (
+            <CrowsFootEnd
+              anchor={{ x: sourceX, y: sourceY }}
+              outward={getHandleOutwardVector(sourcePosition)}
+              cardinality={srcCard}
+              color={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          )}
+          {tgtCard && (
+            <CrowsFootEnd
+              anchor={{ x: targetX, y: targetY }}
+              outward={getHandleOutwardVector(targetPosition)}
+              cardinality={tgtCard}
+              color={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          )}
+        </g>
+      )}
+
+      {/* Draggable waypoint dots when selected */}
+      {selected && activeManual.length > 0 && (
+        <g>
+          {activeManual.map((pt, idx) => (
+            <circle
+              key={`wp-${idx}`}
+              cx={pt.x}
+              cy={pt.y}
+              r={6}
+              fill="#38bdf8"
+              stroke="#020617"
+              strokeWidth={2}
+              className="nodrag nopan cursor-grab active:cursor-grabbing"
+              onPointerDown={(e) => startWaypointDrag(e, idx)}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                const next = activeManual.filter((_, i) => i !== idx);
+                setDragWaypoints(next);
+                data?.onCommitWaypoints?.(id, next);
+              }}
+            >
+              <title>Drag to move bend point • Double-click to remove</title>
+            </circle>
+          ))}
+        </g>
+      )}
+
+      {/* Draggable midpoint bend handle when selected and no manual waypoints exist yet */}
+      {selected && activeManual.length === 0 && (
+        <g>
+          <circle
+            cx={bendKnob.x}
+            cy={hasLabel ? bendKnob.y + 18 : bendKnob.y}
+            r={6}
+            fill="#0f172a"
+            stroke="#38bdf8"
+            strokeWidth={2}
+            className="nodrag nopan cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => startWaypointDrag(e, "new")}
+          >
+            <title>Drag to manually bend this line</title>
+          </circle>
+        </g>
+      )}
+
       {hasLabel && (
         <EdgeLabelRenderer>
           <div
@@ -77,8 +520,8 @@ export function StepEdge({
                 {designEdge.step}
               </span>
             )}
-            {designEdge?.label && (
-              <span className="max-w-[160px] truncate">{designEdge.label}</span>
+            {labelText && (
+              <span className="max-w-[160px] truncate">{labelText}</span>
             )}
             {designEdge?.locked && (
               <Lock className="h-2.5 w-2.5 text-amber-400" />
