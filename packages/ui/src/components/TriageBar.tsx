@@ -1,6 +1,7 @@
 import {
   ArrowDownUp,
   Bell,
+  CheckCircle2,
   LayoutGrid,
   Plus,
   Redo2,
@@ -32,8 +33,10 @@ interface TriageBarProps {
   onRedo: () => void;
   openQuestionsCount: number;
   pendingAgentCount: number;
+  decisionsCount: number;
   onOpenQuestions: () => void;
   onOpenPendingReview: () => void;
+  onOpenDecisions: () => void;
   showOfflineWarning: boolean;
 }
 
@@ -60,8 +63,10 @@ export function TriageBar({
   onRedo,
   openQuestionsCount,
   pendingAgentCount,
+  decisionsCount,
   onOpenQuestions,
   onOpenPendingReview,
+  onOpenDecisions,
   showOfflineWarning,
 }: TriageBarProps) {
   return (
@@ -174,6 +179,23 @@ export function TriageBar({
           <span className="sm:hidden">Review</span>
           <span className="rounded bg-slate-950/60 px-1 text-[10px] font-mono">
             {pendingAgentCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenDecisions}
+          title="View resolved design decisions (ADRs) & project threads"
+          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+            decisionsCount > 0
+              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+              : "border-slate-700 bg-slate-800/70 text-slate-300 hover:bg-slate-700"
+          }`}
+        >
+          <CheckCircle2 className="h-3 w-3" />
+          <span>Decisions</span>
+          <span className="rounded bg-slate-950/60 px-1 text-[10px] font-mono">
+            {decisionsCount}
           </span>
         </button>
 

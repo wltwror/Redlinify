@@ -2,7 +2,7 @@
 
 **Redlinify** is a local-first, repo-native collaborative design workbench for human developers and AI coding agents.
 
-Instead of negotiating architecture, database schemas, and flows exclusively in ephemeral chat threads, your coding agent writes structured multi-view semantic diagrams straight into `.design/` via MCP. You inspect, edit, lock approved parts, bend edges, and exchange anchored questions or change requests in a fast local browser UI—then prompt the agent to pull a concise semantic diff.
+Instead of negotiating architecture, database schemas, and flows exclusively in ephemeral chat threads, your coding agent writes structured multi-view semantic diagrams straight into `.design/` via MCP. You inspect, edit, lock approved parts (violet), bend edges, and exchange anchored questions or change requests in a fast local browser UI—then prompt the agent to pull a concise semantic diff.
 
 ---
 
@@ -12,8 +12,8 @@ Instead of negotiating architecture, database schemas, and flows exclusively in 
 * **Isolated Layout & Checkpoints:** Manual positions, edge bend waypoints, and viewport zoom stay in `.design/.layout/*.json` (gitignored). Agent snapshots in `.design/.checkpoint/*.json` (gitignored) power compact token-efficient semantic diffs.
 * **General & ER Diagram Modes:** Model component architectures, algorithms, and integrations alongside Crow's Foot / Barker ER schemas with `PK`, `FK`, `UQ`, `IDX`, and nullable/mandatory (`○` / `*`) toggles.
 * **Asynchronous, Prompt-Driven MCP Workflow:** Separate stdio MCP (`redlinify mcp`) and local web server (`redlinify ui`) processes communicate over atomic locked `.design/` files on disk, keeping your browser live across agent restarts.
-* **Persistent Decision Log (ADRs) & Code Traceability:** Anchored threads graduate into searchable ADRs when resolved, and nodes track `code_refs` across `draft → needs_input → approved → implemented | drifted`.
-* **Dark & Light Themes:** Built-in theme toggle in the top bar (persisted locally in browser storage).
+* **Decisions & Code Traceability:** Anchored threads graduate into searchable Architecture Decision Records under **Decisions** when resolved, and nodes track `code_refs` across `draft → needs_input → approved → implemented | drifted`.
+* **Light/Dark Themes & Dots/Grid Canvas:** Persistent Light/Dark theme and Dots/Grid background toggles in the top bar.
 
 ---
 
@@ -26,7 +26,7 @@ Instead of negotiating architecture, database schemas, and flows exclusively in 
 │   ├── architecture.json       # Git-tracked: semantic graph (zero pixel coordinates)
 │   └── database_er.json
 ├── threads/
-│   └── thr_a1b2c3d4e5f6.json   # Git-tracked: one file per anchored thread / ADR
+│   └── thr_a1b2c3d4e5f6.json   # Git-tracked: one file per anchored thread / decision
 ├── .layout/                    # Gitignored: manual node positions, edge bends, zoom
 └── .checkpoint/                # Gitignored: last agent-authored semantic snapshot
 ```
@@ -38,7 +38,7 @@ Instead of negotiating architecture, database schemas, and flows exclusively in 
 Requires **Node.js >= 22.0.0**.
 
 ```bash
-git clone <your-fork-or-repo-url>
+git clone <your-repo-url>
 cd Redlinify
 npm install
 npm run build
@@ -110,8 +110,8 @@ For agent prompting best practices, see [skill/SKILL.md](skill/SKILL.md).
 | `upsert_view` | Create or replace a semantic `DesignView` with optimistic concurrency (`base_hash`) and lock protection. |
 | `patch_view` | Apply targeted edits (`meta`, add/update/remove nodes or edges, `section_ops`) with `base_hash` and lock guards. |
 | `acknowledge_feedback` | Advance agent checkpoints when human edits are accepted as-is. |
-| `post_thread_message` | Open an anchored thread (`question`, `change_request`, `decision`, `drift_alert`), reply, or resolve with a 1-line `resolution_summary` (ADR). |
-| `get_node_history` | Query full transcripts of resolved ADR threads by `target_id`, `entity_ref`, `view_id`, or text search. |
+| `post_thread_message` | Open an anchored thread (`question`, `change_request`, `decision`, `drift_alert`), reply, or resolve with a 1-line `resolution_summary`. |
+| `get_node_history` | Query full transcripts of resolved Decision/ADR threads by `target_id`, `entity_ref`, `view_id`, or text search. |
 | `sync_code_refs` | Link source `code_refs` (`path:symbol`) and update `implemented` / `drifted` status without clobbering unrelated human edits. |
 
 ---
@@ -126,7 +126,7 @@ For agent prompting best practices, see [skill/SKILL.md](skill/SKILL.md).
 | Manual edge bend point | Select a line and drag its midpoint handle (double-click to remove) |
 | Inline edit title / entry / attribute | Double-click text inside an unlocked card |
 | Quick actions menu | Right-click canvas, tab, card, or edge |
-| Undo / Redo (per tab) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
+| Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
 | Delete selected unlocked elements | `Delete` or `Backspace` |
 
 ---
@@ -143,19 +143,14 @@ Monorepo packages:
 
 * `packages/shared` (`@redlinify/shared`): Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (plus `@redlinify/shared/browser`).
 * `packages/server` (`@redlinify/server`): CLI (`init`, `mcp`, `ui`), stdio MCP server, and loopback HTTP + WebSocket UI host with `chokidar` self-echo suppression.
-* `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` + Tailwind CSS workbench.
+* `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
 
-See [SPEC.md](SPEC.md) for the full design specification and [AGENTS.md](AGENTS.md) for architectural invariants.
-
----
-
-## Contributing & Security
-
-* Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) before opening a pull request.
-* To report a security issue, please follow [SECURITY.md](SECURITY.md).
+See [SPEC.md](SPEC.md) for the design specification and [AGENTS.md](AGENTS.md) for architectural invariants.
 
 ---
 
-## License
+## Issues & License
+
+Bug reports and PRs are welcome—run `npm run typecheck && npm run build && npm test` before submitting.
 
 [MIT](LICENSE) © 2026 Vojtěch Faltus

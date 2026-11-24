@@ -13,6 +13,7 @@ import type {
   Cardinality,
   DesignEdge,
   DiagramType,
+  HandleSide,
 } from "@redlinify/shared/browser";
 import type { Point } from "../layout/routing";
 
@@ -25,7 +26,11 @@ export interface StepEdgeData extends Record<string, unknown> {
   manualWaypoints?: Point[];
   autoWaypoints?: Point[];
   curveOffset?: Point;
-  onCommitWaypoints?: (edgeId: string, waypoints: Point[]) => void;
+  onCommitWaypoints?: (
+    edgeId: string,
+    waypoints: Point[],
+    handles?: { source_handle: HandleSide; target_handle: HandleSide },
+  ) => void;
 }
 
 export type StepFlowEdge = Edge<StepEdgeData, "step">;
@@ -88,6 +93,25 @@ function getHandleOutwardVector(position: Position): Point {
     case Position.Top:
       return { x: 0, y: -1 };
   }
+}
+
+function positionToHandleSide(position: Position): HandleSide {
+  switch (position) {
+    case Position.Right:
+      return "right";
+    case Position.Left:
+      return "left";
+    case Position.Bottom:
+      return "bottom";
+    case Position.Top:
+      return "top";
+  }
+}
+
+function normalizeVec(dx: number, dy: number, fallback: Point): Point {
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-3) return fallback;
+  return { x: dx / len, y: dy / len };
 }
 
 function isMandatoryCardinality(c?: Cardinality): boolean {
@@ -278,6 +302,11 @@ export function StepEdge({
   const autoWaypoints = data?.autoWaypoints ?? [];
   const curveOffset = data?.curveOffset ?? { x: 0, y: 0 };
 
+  const defaultSourceOutward = getHandleOutwardVector(sourcePosition);
+  const defaultTargetOutward = getHandleOutwardVector(targetPosition);
+  let sourceOutward: Point = defaultSourceOutward;
+  let targetOutward: Point = defaultTargetOutward;
+
   let edgePath = "";
   let labelX = (sx + tx) / 2;
   let labelY = (sy + ty) / 2;
@@ -286,6 +315,10 @@ export function StepEdge({
   if (activeManual.length > 0) {
     const pts = [{ x: sx, y: sy }, ...activeManual, { x: tx, y: ty }];
     edgePath = buildRoundedPolylinePath(pts, 12);
+    const first = activeManual[0]!;
+    const last = activeManual[activeManual.length - 1]!;
+    sourceOutward = normalizeVec(first.x - sx, first.y - sy, defaultSourceOutward);
+    targetOutward = normalizeVec(last.x - tx, last.y - ty, defaultTargetOutward);
     const midIdx = Math.floor(activeManual.length / 2);
     const wp = activeManual[midIdx]!;
     labelX = wp.x;
@@ -294,6 +327,10 @@ export function StepEdge({
   } else if (autoWaypoints.length > 0) {
     const pts = [{ x: sx, y: sy }, ...autoWaypoints, { x: tx, y: ty }];
     edgePath = buildRoundedPolylinePath(pts, 14);
+    const first = autoWaypoints[0]!;
+    const last = autoWaypoints[autoWaypoints.length - 1]!;
+    sourceOutward = normalizeVec(first.x - sx, first.y - sy, defaultSourceOutward);
+    targetOutward = normalizeVec(last.x - tx, last.y - ty, defaultTargetOutward);
     if (autoWaypoints.length >= 2) {
       const a = autoWaypoints[0]!;
       const b = autoWaypoints[1]!;
@@ -308,6 +345,8 @@ export function StepEdge({
     const cx = (sx + tx) / 2 + curveOffset.x;
     const cy = (sy + ty) / 2 + curveOffset.y;
     edgePath = `M ${sx} ${sy} Q ${cx} ${cy} ${tx} ${ty}`;
+    sourceOutward = normalizeVec(cx - sx, cy - sy, defaultSourceOutward);
+    targetOutward = normalizeVec(cx - tx, cy - ty, defaultTargetOutward);
     labelX = 0.25 * sx + 0.5 * cx + 0.25 * tx;
     labelY = 0.25 * sy + 0.5 * cy + 0.25 * ty;
     bendKnob = { x: labelX, y: labelY };
@@ -360,7 +399,14 @@ export function StepEdge({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
-      data?.onCommitWaypoints?.(id, latest);
+      const handles =
+        latest.length > 0
+          ? {
+              source_handle: positionToHandleSide(sourcePosition),
+              target_handle: positionToHandleSide(targetPosition),
+            }
+          : undefined;
+      data?.onCommitWaypoints?.(id, latest, handles);
     };
 
     window.addEventListener("pointermove", onMove);
@@ -478,7 +524,7 @@ export function StepEdge({
         <g style={{ opacity }}>
           <SubtypeTriangle
             anchor={{ x: tx, y: ty }}
-            outward={getHandleOutwardVector(targetPosition)}
+            outward={targetOutward}
             color={strokeColor}
             strokeWidth={strokeWidth}
           />
@@ -489,7 +535,7 @@ export function StepEdge({
           {srcCard && (
             <CrowsFootEnd
               anchor={{ x: sx, y: sy }}
-              outward={getHandleOutwardVector(sourcePosition)}
+              outward={sourceOutward}
               cardinality={srcCard}
               color={strokeColor}
               strokeWidth={strokeWidth}
@@ -498,7 +544,7 @@ export function StepEdge({
           {tgtCard && (
             <CrowsFootEnd
               anchor={{ x: tx, y: ty }}
-              outward={getHandleOutwardVector(targetPosition)}
+              outward={targetOutward}
               cardinality={tgtCard}
               color={strokeColor}
               strokeWidth={strokeWidth}
@@ -513,7 +559,7 @@ export function StepEdge({
           <div
             style={{
               position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px,${selected && activeManual.length > 0 ? labelY - 22 : labelY}px)`,
               pointerEvents: "all",
               zIndex: selected ? 40 : 10,
             }}
@@ -532,7 +578,7 @@ export function StepEdge({
               <span className="max-w-[160px] truncate">{labelText}</span>
             )}
             {designEdge?.locked && (
-              <Lock className="h-2.5 w-2.5 text-amber-400" />
+              <Lock className="h-2.5 w-2.5 text-violet-400" />
             )}
           </div>
         )}
@@ -548,14 +594,24 @@ export function StepEdge({
                 zIndex: 50,
               }}
               title="Drag to move bend point • Double-click to remove"
-              className="nodrag nopan h-3.5 w-3.5 rounded-full border-2 border-slate-950 bg-sky-400 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+              className="nodrag nopan h-4 w-4 rounded-full border-2 border-slate-950 bg-sky-400 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+              onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onPointerDown={(e) => startWaypointDrag(e, idx)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 const next = activeManual.filter((_, i) => i !== idx);
                 setDragWaypoints(next);
-                data?.onCommitWaypoints?.(id, next);
+                data?.onCommitWaypoints?.(
+                  id,
+                  next,
+                  next.length > 0
+                    ? {
+                        source_handle: positionToHandleSide(sourcePosition),
+                        target_handle: positionToHandleSide(targetPosition),
+                      }
+                    : undefined,
+                );
               }}
             />
           ))}
@@ -569,7 +625,8 @@ export function StepEdge({
               zIndex: 50,
             }}
             title="Drag to manually bend this line"
-            className="nodrag nopan h-3.5 w-3.5 rounded-full border-2 border-sky-400 bg-slate-950 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+            className="nodrag nopan h-4 w-4 rounded-full border-2 border-sky-400 bg-slate-950 shadow-md cursor-grab active:cursor-grabbing hover:scale-125 transition-transform"
+            onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => startWaypointDrag(e, "new")}
           />

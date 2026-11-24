@@ -85,6 +85,12 @@ interface ToastState {
   tone: "info" | "warning" | "error";
 }
 
+interface HistoryEntry {
+  view: DesignView;
+  positions: Record<string, Point>;
+  edgeRoutes: Record<string, EdgeRoute>;
+}
+
 type ContextMenuState =
   | { kind: "pane"; x: number; y: number; flowPos: Point }
   | { kind: "node"; x: number; y: number; nodeId: string }
@@ -145,6 +151,15 @@ function WorkbenchInner() {
   const [theme, setTheme] = useState<"dark" | "light">(() =>
     document.documentElement.classList.contains("dark") ? "dark" : "light",
   );
+  const [bgPattern, setBgPattern] = useState<"dots" | "grid">(() => {
+    try {
+      return localStorage.getItem("redlinify-bg-pattern") === "grid"
+        ? "grid"
+        : "dots";
+    } catch {
+      return "dots";
+    }
+  });
 
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
@@ -152,8 +167,8 @@ function WorkbenchInner() {
     nodePositions: Record<string, Point>;
     edgeRoutes: Record<string, EdgeRoute>;
   } | null>(null);
-  const undoMapRef = useRef<Map<string, DesignView[]>>(new Map());
-  const redoMapRef = useRef<Map<string, DesignView[]>>(new Map());
+  const undoMapRef = useRef<Map<string, HistoryEntry[]>>(new Map());
+  const redoMapRef = useRef<Map<string, HistoryEntry[]>>(new Map());
   const viewportReadyRef = useRef(false);
   const activeViewIdRef = useRef<string | null>(null);
   const activeViewRef = useRef<DesignView | null>(null);
@@ -185,6 +200,37 @@ function WorkbenchInner() {
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("redlinify-bg-pattern", bgPattern);
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, [bgPattern]);
+
+  const toggleBgPattern = useCallback(() => {
+    setBgPattern((prev) => (prev === "dots" ? "grid" : "dots"));
+  }, []);
+
+  const pushHistoryEntry = useCallback(
+    (viewId: string, customEntry?: HistoryEntry) => {
+      const currView = activeViewRef.current;
+      if (!customEntry && (!currView || currView.id !== viewId)) return;
+      const entry: HistoryEntry = customEntry ?? {
+        view: structuredClone(currView!),
+        positions: structuredClone(positionsRef.current),
+        edgeRoutes: structuredClone(edgeRoutesRef.current),
+      };
+      const undoStack = undoMapRef.current.get(viewId) ?? [];
+      undoStack.push(entry);
+      if (undoStack.length > 50) undoStack.shift();
+      undoMapRef.current.set(viewId, undoStack);
+      redoMapRef.current.set(viewId, []);
+      setHistoryTick((t) => t + 1);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (selectedNodeIds.length > 1) {
@@ -365,12 +411,7 @@ function WorkbenchInner() {
         currentSnapshot &&
         currentSnapshot.id === nextView.id
       ) {
-        const undoStack = undoMapRef.current.get(nextView.id) ?? [];
-        undoStack.push(structuredClone(currentSnapshot));
-        if (undoStack.length > 40) undoStack.shift();
-        undoMapRef.current.set(nextView.id, undoStack);
-        redoMapRef.current.set(nextView.id, []);
-        setHistoryTick((t) => t + 1);
+        pushHistoryEntry(nextView.id);
       }
 
       const run = async () => {
@@ -402,7 +443,21 @@ function WorkbenchInner() {
       saveChainRef.current = queued.catch(() => {});
       return queued;
     },
-    [loadWorkspaceMeta, showToast],
+    [loadWorkspaceMeta, pushHistoryEntry, showToast],
+  );
+
+  const applyHistoryEntry = useCallback(
+    async (target: HistoryEntry, curr: DesignView) => {
+      positionsRef.current = structuredClone(target.positions);
+      edgeRoutesRef.current = structuredClone(target.edgeRoutes);
+      setLayoutVersion((v) => v + 1);
+      setRoutingTick((t) => t + 1);
+      await persistCurrentLayout(curr.id);
+      if (JSON.stringify(target.view) !== JSON.stringify(curr)) {
+        await persistView(target.view, { recordHistory: false });
+      }
+    },
+    [persistCurrentLayout, persistView],
   );
 
   const handleUndo = useCallback(async () => {
@@ -412,12 +467,16 @@ function WorkbenchInner() {
     const prev = undoStack.pop();
     if (!prev) return;
     const redoStack = redoMapRef.current.get(curr.id) ?? [];
-    redoStack.push(structuredClone(curr));
+    redoStack.push({
+      view: structuredClone(curr),
+      positions: structuredClone(positionsRef.current),
+      edgeRoutes: structuredClone(edgeRoutesRef.current),
+    });
     redoMapRef.current.set(curr.id, redoStack);
     setHistoryTick((t) => t + 1);
-    await persistView(prev, { recordHistory: false });
+    await applyHistoryEntry(prev, curr);
     showToast("Undone");
-  }, [persistView, showToast]);
+  }, [applyHistoryEntry, showToast]);
 
   const handleRedo = useCallback(async () => {
     const curr = activeViewRef.current;
@@ -426,12 +485,16 @@ function WorkbenchInner() {
     const next = redoStack.pop();
     if (!next) return;
     const undoStack = undoMapRef.current.get(curr.id) ?? [];
-    undoStack.push(structuredClone(curr));
+    undoStack.push({
+      view: structuredClone(curr),
+      positions: structuredClone(positionsRef.current),
+      edgeRoutes: structuredClone(edgeRoutesRef.current),
+    });
     undoMapRef.current.set(curr.id, undoStack);
     setHistoryTick((t) => t + 1);
-    await persistView(next, { recordHistory: false });
+    await applyHistoryEntry(next, curr);
     showToast("Redone");
-  }, [persistView, showToast]);
+  }, [applyHistoryEntry, showToast]);
 
   // Global keyboard shortcuts: Ctrl+Z / Cmd+Z (Undo) and Ctrl+Shift+Z / Ctrl+Y (Redo)
   useEffect(() => {
@@ -660,34 +723,54 @@ function WorkbenchInner() {
   );
 
   const handleCommitWaypoints = useCallback(
-    (edgeId: string, waypoints: Point[]) => {
+    (
+      edgeId: string,
+      waypoints: Point[],
+      handles?: { source_handle: HandleSide; target_handle: HandleSide },
+    ) => {
       const viewId = activeViewIdRef.current;
       if (!viewId) return;
+      pushHistoryEntry(viewId);
       const currentRoute = edgeRoutesRef.current[edgeId] ?? {};
       if (waypoints.length === 0) {
         const nextRoute = { ...currentRoute };
         delete nextRoute.waypoints;
         if (Object.keys(nextRoute).length === 0) {
-          delete edgeRoutesRef.current[edgeId];
+          const next = { ...edgeRoutesRef.current };
+          delete next[edgeId];
+          edgeRoutesRef.current = next;
         } else {
-          edgeRoutesRef.current[edgeId] = nextRoute;
+          edgeRoutesRef.current = {
+            ...edgeRoutesRef.current,
+            [edgeId]: nextRoute,
+          };
         }
       } else {
         edgeRoutesRef.current = {
           ...edgeRoutesRef.current,
-          [edgeId]: { ...currentRoute, waypoints },
+          [edgeId]: {
+            ...currentRoute,
+            ...(handles && !currentRoute.source_handle
+              ? { source_handle: handles.source_handle }
+              : {}),
+            ...(handles && !currentRoute.target_handle
+              ? { target_handle: handles.target_handle }
+              : {}),
+            waypoints,
+          },
         };
       }
       setRoutingTick((t) => t + 1);
       void persistCurrentLayout(viewId);
     },
-    [persistCurrentLayout],
+    [persistCurrentLayout, pushHistoryEntry],
   );
 
   const handleUpdateEdgeRoute = useCallback(
     (edgeId: string, patch: Partial<EdgeRoute> | null) => {
       const viewId = activeViewIdRef.current;
       if (!viewId) return;
+      pushHistoryEntry(viewId);
       if (patch === null) {
         const next = { ...edgeRoutesRef.current };
         delete next[edgeId];
@@ -714,7 +797,7 @@ function WorkbenchInner() {
       setRoutingTick((t) => t + 1);
       void persistCurrentLayout(viewId);
     },
-    [persistCurrentLayout],
+    [persistCurrentLayout, pushHistoryEntry],
   );
 
   // Sync DesignView -> React Flow nodes
@@ -1026,10 +1109,11 @@ function WorkbenchInner() {
 
   const handleAutoLayout = useCallback(async () => {
     if (!activeView) return;
+    pushHistoryEntry(activeView.id);
     await clearLayout(activeView.id);
     await loadViewDetail(activeView.id, { forceResetLayout: true });
     showToast("Auto-layout and smart edge routes reset");
-  }, [activeView, loadViewDetail, showToast]);
+  }, [activeView, loadViewDetail, pushHistoryEntry, showToast]);
 
   const handleToggleDirection = useCallback(async () => {
     if (!activeView) return;
@@ -1130,13 +1214,31 @@ function WorkbenchInner() {
           y: Math.round(n.position.y),
         };
       }
+      const origin = dragOriginRef.current;
+      if (origin) {
+        const anyMoved = draggedNodes.some((n) => {
+          const prev = origin.nodePositions[n.id];
+          return (
+            !prev ||
+            Math.round(prev.x) !== nextPos[n.id]!.x ||
+            Math.round(prev.y) !== nextPos[n.id]!.y
+          );
+        });
+        if (anyMoved) {
+          pushHistoryEntry(activeView.id, {
+            view: structuredClone(activeView),
+            positions: structuredClone(origin.nodePositions),
+            edgeRoutes: structuredClone(origin.edgeRoutes),
+          });
+        }
+      }
       positionsRef.current = nextPos;
       applyAutoMoveWaypoints();
       dragOriginRef.current = null;
       setRoutingTick((t) => t + 1);
       void persistCurrentLayout(activeView.id);
     },
-    [activeView, applyAutoMoveWaypoints, persistCurrentLayout],
+    [activeView, applyAutoMoveWaypoints, persistCurrentLayout, pushHistoryEntry],
   );
 
   const handleNodeDragStop = useCallback(
@@ -1174,6 +1276,7 @@ function WorkbenchInner() {
         return;
       }
 
+      pushHistoryEntry(activeView.id);
       const nextRoute: EdgeRoute = {
         ...(edgeRoutesRef.current[oldEdge.id] ?? {}),
         ...(newConnection.sourceHandle
@@ -1194,21 +1297,30 @@ function WorkbenchInner() {
         existing.source !== newConnection.source ||
         existing.target !== newConnection.target
       ) {
-        await persistView({
-          ...activeView,
-          edges: activeView.edges.map((e) =>
-            e.id === oldEdge.id
-              ? {
-                  ...e,
-                  source: newConnection.source!,
-                  target: newConnection.target!,
-                }
-              : e,
-          ),
-        });
+        await persistView(
+          {
+            ...activeView,
+            edges: activeView.edges.map((e) =>
+              e.id === oldEdge.id
+                ? {
+                    ...e,
+                    source: newConnection.source!,
+                    target: newConnection.target!,
+                  }
+                : e,
+            ),
+          },
+          { recordHistory: false },
+        );
       }
     },
-    [activeView, persistCurrentLayout, persistView, showToast],
+    [
+      activeView,
+      persistCurrentLayout,
+      persistView,
+      pushHistoryEntry,
+      showToast,
+    ],
   );
 
   const handleBeforeDelete = useCallback(
@@ -1550,13 +1662,25 @@ function WorkbenchInner() {
         label: "Add Bend Point Here",
         onSelect: () => {
           const existingWps = edgeRoutesRef.current[edge.id]?.waypoints ?? [];
-          handleCommitWaypoints(edge.id, [
-            ...existingWps,
-            {
-              x: Math.round(contextMenu.flowPos.x),
-              y: Math.round(contextMenu.flowPos.y),
-            },
-          ]);
+          const rfEdge = rfEdges.find((e) => e.id === edge.id);
+          const handles =
+            rfEdge?.sourceHandle && rfEdge?.targetHandle
+              ? {
+                  source_handle: rfEdge.sourceHandle as HandleSide,
+                  target_handle: rfEdge.targetHandle as HandleSide,
+                }
+              : undefined;
+          handleCommitWaypoints(
+            edge.id,
+            [
+              ...existingWps,
+              {
+                x: Math.round(contextMenu.flowPos.x),
+                y: Math.round(contextMenu.flowPos.y),
+              },
+            ],
+            handles,
+          );
         },
       },
       {
@@ -1660,6 +1784,7 @@ function WorkbenchInner() {
     historyTick,
     persistCurrentLayout,
     persistView,
+    rfEdges,
     selectSingleNode,
     selectedEdgeId,
     selectedNodeId,
@@ -1692,6 +1817,10 @@ function WorkbenchInner() {
     pendingFeedback.view_diffs.length +
     pendingFeedback.pending_threads.length +
     pendingFeedback.view_requests.length;
+  const decisionsCount = useMemo(
+    () => allThreads.filter((t) => t.status === "resolved").length,
+    [allThreads],
+  );
 
   const canUndo = useMemo(() => {
     void historyTick;
@@ -1814,7 +1943,7 @@ function WorkbenchInner() {
         return theme === "dark" ? "#f43f5e" : "#e11d48";
       }
       if (data?.node?.locked) {
-        return theme === "dark" ? "#f59e0b" : "#d97706";
+        return theme === "dark" ? "#a78bfa" : "#7c3aed";
       }
       return theme === "dark" ? "#38bdf8" : "#0284c7";
     },
@@ -1858,6 +1987,8 @@ function WorkbenchInner() {
         onDeleteView={handleDeleteView}
         theme={theme}
         onToggleTheme={toggleTheme}
+        bgPattern={bgPattern}
+        onToggleBgPattern={toggleBgPattern}
       />
 
       <TriageBar
@@ -1875,6 +2006,7 @@ function WorkbenchInner() {
         onRedo={() => void handleRedo()}
         openQuestionsCount={openQuestionsCount}
         pendingAgentCount={pendingAgentCount}
+        decisionsCount={decisionsCount}
         onOpenQuestions={() => {
           selectSingleNode(null);
           setDrawerMode("workspace");
@@ -1884,6 +2016,11 @@ function WorkbenchInner() {
           selectSingleNode(null);
           setDrawerMode("workspace");
           setWorkspaceTab("pending");
+        }}
+        onOpenDecisions={() => {
+          selectSingleNode(null);
+          setDrawerMode("workspace");
+          setWorkspaceTab("adrs");
         }}
         showOfflineWarning={!wsConnected && (wsEverConnected || wsGraceExpired)}
       />
@@ -1955,10 +2092,22 @@ function WorkbenchInner() {
               proOptions={PRO_OPTIONS}
             >
               <Background
-                variant={BackgroundVariant.Dots}
-                gap={22}
-                size={1.2}
-                color={theme === "dark" ? "#1e293b" : "#cbd5e1"}
+                variant={
+                  bgPattern === "grid"
+                    ? BackgroundVariant.Lines
+                    : BackgroundVariant.Dots
+                }
+                gap={24}
+                size={bgPattern === "grid" ? 1 : 1.8}
+                color={
+                  bgPattern === "grid"
+                    ? theme === "dark"
+                      ? "#1e293b"
+                      : "#cbd5e1"
+                    : theme === "dark"
+                      ? "#334155"
+                      : "#94a3b8"
+                }
               />
               <Controls showInteractive={false} />
               <MiniMap

@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   Clock,
   Database,
+  Grid3x3,
+  Grip,
   Layers,
   Moon,
   MoreVertical,
@@ -36,6 +38,8 @@ interface TabBarProps {
   onDeleteView: (viewId: string) => Promise<void>;
   theme: "dark" | "light";
   onToggleTheme: () => void;
+  bgPattern: "dots" | "grid";
+  onToggleBgPattern: () => void;
 }
 
 export function TabBar({
@@ -51,6 +55,8 @@ export function TabBar({
   onDeleteView,
   theme,
   onToggleTheme,
+  bgPattern,
+  onToggleBgPattern,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -273,7 +279,25 @@ export function TabBar({
           </button>
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center pl-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
+          <button
+            type="button"
+            onClick={onToggleBgPattern}
+            title={
+              bgPattern === "dots"
+                ? "Switch canvas background to grid"
+                : "Switch canvas background to dots"
+            }
+            aria-label="Toggle canvas background pattern"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
+          >
+            {bgPattern === "dots" ? (
+              <Grid3x3 className="h-3.5 w-3.5 text-slate-300" />
+            ) : (
+              <Grip className="h-3.5 w-3.5 text-sky-400" />
+            )}
+          </button>
+
           <button
             type="button"
             onClick={onToggleTheme}

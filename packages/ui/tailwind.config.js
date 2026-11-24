@@ -56,8 +56,11 @@ export default {
           950: cssRgbVar("--rl-rose-950"),
         },
         violet: {
+          200: cssRgbVar("--rl-violet-200"),
           300: cssRgbVar("--rl-violet-300"),
+          400: cssRgbVar("--rl-violet-400"),
           500: cssRgbVar("--rl-violet-500"),
+          950: cssRgbVar("--rl-violet-950"),
         },
         teal: {
           300: cssRgbVar("--rl-teal-300"),

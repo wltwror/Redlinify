@@ -426,7 +426,7 @@ function ThreadPanel({
               ) : (
                 <ChevronRight className="h-3.5 w-3.5" />
               )}
-              Resolved Decisions (ADRs)
+              Resolved Decisions
             </span>
             <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px]">
               {resolvedThreads.length}
@@ -772,7 +772,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                   : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              ADRs ({allThreads.filter((t) => t.status === "resolved").length})
+              Decisions ({allThreads.filter((t) => t.status === "resolved").length})
             </button>
           </div>
         )}
@@ -785,7 +785,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
               <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
                 <div className="flex items-center gap-2 text-xs">
                   {nodeDraft.locked ? (
-                    <Lock className="h-3.5 w-3.5 text-amber-400" />
+                    <Lock className="h-3.5 w-3.5 text-violet-400" />
                   ) : (
                     <Unlock className="h-3.5 w-3.5 text-slate-400" />
                   )}
@@ -803,7 +803,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                   }
                   className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                     nodeDraft.locked
-                      ? "bg-amber-500/20 text-amber-200 border border-amber-500/40"
+                      ? "bg-violet-500/20 text-violet-200 border border-violet-500/40"
                       : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
                   }`}
                 >
@@ -1525,7 +1525,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
               <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
                 <div className="flex items-center gap-2 text-xs">
                   {edgeDraft.locked ? (
-                    <Lock className="h-3.5 w-3.5 text-amber-400" />
+                    <Lock className="h-3.5 w-3.5 text-violet-400" />
                   ) : (
                     <Unlock className="h-3.5 w-3.5 text-slate-400" />
                   )}
@@ -1541,7 +1541,11 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                       locked: !edgeDraft.locked,
                     })
                   }
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-700"
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                    edgeDraft.locked
+                      ? "bg-violet-500/20 text-violet-200 border border-violet-500/40 hover:bg-violet-500/30"
+                      : "border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  }`}
                 >
                   {edgeDraft.locked ? "Unlock" : "Lock"}
                 </button>
@@ -1963,7 +1967,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                    How Threads &amp; ADRs Work
+                    How Threads &amp; Decisions Work
                   </span>
                   {showAdrGuide ? (
                     <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
@@ -1996,7 +2000,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
 
               <div className="space-y-2">
                 <div className="text-xs font-semibold text-emerald-300">
-                  Resolved Decisions (ADRs) Across Project
+                  Resolved Decisions Across Project
                 </div>
                 {allThreads.filter((t) => t.status === "resolved").length === 0 ? (
                   <p className="text-xs text-slate-500">

@@ -45,8 +45,11 @@
   --rl-rose-600: 225 29 72;
   --rl-rose-950: 255 228 230;
 
+  --rl-violet-200: 91 33 182;
   --rl-violet-300: 109 40 217;
+  --rl-violet-400: 124 58 237;
   --rl-violet-500: 124 58 237;
+  --rl-violet-950: 237 233 254;
 
   --rl-teal-300: 15 118 110;
   --rl-teal-500: 13 148 136;
@@ -54,7 +57,7 @@
   --rl-canvas-bg: #f1f5f9;
   --rl-edge-default: #64748b;
   --rl-edge-selected: #0284c7;
-  --rl-edge-locked: #d97706;
+  --rl-edge-locked: #7c3aed;
 }
 
 html.dark {
@@ -100,8 +103,11 @@ html.dark {
   --rl-rose-600: 225 29 72;
   --rl-rose-950: 76 5 25;
 
+  --rl-violet-200: 221 214 254;
   --rl-violet-300: 196 181 253;
+  --rl-violet-400: 167 139 250;
   --rl-violet-500: 139 92 246;
+  --rl-violet-950: 46 16 101;
 
   --rl-teal-300: 94 234 212;
   --rl-teal-500: 20 184 166;
@@ -109,7 +115,7 @@ html.dark {
   --rl-canvas-bg: #020617;
   --rl-edge-default: #64748b;
   --rl-edge-selected: #38bdf8;
-  --rl-edge-locked: #f59e0b;
+  --rl-edge-locked: #a78bfa;
 }
 
 html,
@@ -158,6 +164,10 @@ body,
 
 .react-flow__edge.selected {
   z-index: 1000 !important;
+}
+
+.react-flow__edgelabel-renderer {
+  z-index: 1100 !important;
 }
 
 @keyframes redlinify-pulse {

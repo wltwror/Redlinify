@@ -162,6 +162,8 @@ function StructuredNodeComponent({
     cardBorder = "border-sky-500/80 ring-2 ring-sky-500/25";
   } else if (waitingOnHumanCount > 0) {
     cardBorder = "border-amber-500/75 ring-1 ring-amber-500/25";
+  } else if (node.locked) {
+    cardBorder = "border-violet-500/60 ring-1 ring-violet-500/20";
   }
 
   const commitTitle = () => {
@@ -279,7 +281,7 @@ function StructuredNodeComponent({
             }
             className={`nodrag rounded p-1 transition-colors ${
               node.locked
-                ? "bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+                ? "border border-violet-500/35 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"
                 : "text-slate-500 hover:bg-slate-800 hover:text-slate-200"
             }`}
           >
