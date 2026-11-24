@@ -80,7 +80,7 @@ export function ContextMenu({
                 ? "cursor-not-allowed text-slate-600"
                 : item.danger
                   ? "text-rose-300 hover:bg-rose-500/15 hover:text-rose-200"
-                  : "text-slate-200 hover:bg-slate-800 hover:text-white"
+                  : "text-slate-200 hover:bg-slate-800 hover:text-slate-50"
             }`}
           >
             <span>{item.label}</span>

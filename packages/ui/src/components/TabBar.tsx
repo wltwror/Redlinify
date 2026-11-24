@@ -4,8 +4,10 @@ import {
   Clock,
   Database,
   Layers,
+  Moon,
   MoreVertical,
   Plus,
+  Sun,
   Trash2,
   X,
 } from "lucide-react";
@@ -32,6 +34,8 @@ interface TabBarProps {
     direction: ViewDirection;
   }) => Promise<void>;
   onDeleteView: (viewId: string) => Promise<void>;
+  theme: "dark" | "light";
+  onToggleTheme: () => void;
 }
 
 export function TabBar({
@@ -45,6 +49,8 @@ export function TabBar({
   onRequestView,
   onCreateBlankView,
   onDeleteView,
+  theme,
+  onToggleTheme,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -259,13 +265,31 @@ export function TabBar({
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+            className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
             title="Request or create a new view"
             aria-label="Add or request view"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
         </nav>
+
+        <div className="ml-auto flex shrink-0 items-center pl-2">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            title={
+              theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+            }
+            aria-label="Toggle color theme"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-3.5 w-3.5 text-amber-300" />
+            ) : (
+              <Moon className="h-3.5 w-3.5 text-sky-400" />
+            )}
+          </button>
+        </div>
       </header>
 
       {tabMenu && (

@@ -38,6 +38,10 @@ This document captures architectural invariants, conventions, and verification c
 7. **Loopback Security Binding & Gateway HTTP Framing**:
    * `redlinify ui` MUST bind strictly to `127.0.0.1` (default port `4173`), never `0.0.0.0`.
    * All HTTP responses must explicitly set `Content-Length`, and request body reads must consume arbitrary chunked streams cleanly (`for await (const chunk of req)`).
+8. **React Flow v12 Selection, Prop Stability & UI Verification**:
+   * Derive multi-selection IDs from `rfNodes`/`rfEdges` via `useMemo`; NEVER pass unmemoized `onSelectionChange` or inline array/object props (`multiSelectionKeyCode`, `deleteKeyCode`, `proOptions`) to `<ReactFlow>`, and NEVER include selection ID arrays in `useEffect`s calling `setRfNodes`/`setRfEdges` (prevents `StoreUpdater` / `SelectionListener` React Error `#185` loops).
+   * Preserve existing runtime properties (`{ ...(existing ?? {}), ... }`) and `selected` flags inside functional `setRfNodes((prev) => ...)` / `setRfEdges((prev) => ...)` updaters.
+   * Keep Light/Dark styling on `--rl-*` CSS variable tokens (`tailwind.config.js` + `index.css`) rather than hardcoded dark hex colors, and run interactive Playwright click/selection/theme checks (in addition to `verify-webapp`) after UI edits.
 
 ---
 

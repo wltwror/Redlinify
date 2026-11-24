@@ -1,6 +1,21 @@
 {
   "name": "@redlinify/server",
   "version": "0.1.0",
+  "description": "Redlinify CLI, stdio MCP server, and local HTTP/WebSocket workbench server.",
+  "license": "MIT",
+  "author": "Vojtěch Faltus",
+  "keywords": [
+    "redlinify",
+    "mcp",
+    "cli",
+    "architecture",
+    "diagrams"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

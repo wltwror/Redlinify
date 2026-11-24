@@ -1,6 +1,19 @@
 {
   "name": "redlinify",
   "version": "0.1.0",
+  "description": "Local-first, repo-native collaborative design workbench for human developers and AI coding agents.",
+  "license": "MIT",
+  "author": "Vojtěch Faltus",
+  "keywords": [
+    "architecture",
+    "diagrams",
+    "er-diagram",
+    "mcp",
+    "ai-agents",
+    "local-first",
+    "react-flow",
+    "elkjs"
+  ],
   "private": true,
   "type": "module",
   "workspaces": [

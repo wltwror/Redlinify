@@ -182,7 +182,7 @@ function CrowsFootEnd({
           cx={circleCenter.x}
           cy={circleCenter.y}
           r={4}
-          fill="#020617"
+          fill="var(--rl-canvas-bg, #020617)"
           stroke={color}
           strokeWidth={strokeWidth}
         />
@@ -217,7 +217,7 @@ function SubtypeTriangle({
   return (
     <polygon
       points={`${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`}
-      fill="#020617"
+      fill="var(--rl-canvas-bg, #020617)"
       stroke={color}
       strokeWidth={strokeWidth}
       strokeLinejoin="round"
@@ -236,7 +236,6 @@ export function StepEdge({
   targetPosition,
   data,
   selected,
-  markerEnd,
 }: EdgeProps<StepFlowEdge>) {
   const { screenToFlowPosition } = useReactFlow();
   const designEdge = data?.edge;
@@ -370,11 +369,12 @@ export function StepEdge({
   };
 
   const strokeColor = selected
-    ? "#38bdf8"
+    ? "var(--rl-edge-selected, #38bdf8)"
     : designEdge?.locked
-      ? "#f59e0b"
-      : "#64748b";
+      ? "var(--rl-edge-locked, #f59e0b)"
+      : "var(--rl-edge-default, #64748b)";
   const strokeWidth = selected ? 2.5 : 1.75;
+  const markerId = `redlinify-arrow-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
   const srcCard = designEdge?.source_cardinality;
   const tgtCard = designEdge?.target_cardinality;
@@ -403,6 +403,29 @@ export function StepEdge({
 
   return (
     <>
+      {!isEr && (
+        <defs>
+          <marker
+            id={markerId}
+            viewBox="-10 -10 20 20"
+            refX="0"
+            refY="0"
+            markerWidth="12.5"
+            markerHeight="12.5"
+            orient="auto-start-reverse"
+          >
+            <polyline
+              stroke={strokeColor}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1"
+              fill={strokeColor}
+              points="-5,-4 0,0 -5,4 -5,-4"
+            />
+          </marker>
+        </defs>
+      )}
+
       <path
         d={edgePath}
         fill="none"
@@ -440,7 +463,7 @@ export function StepEdge({
         <BaseEdge
           id={id}
           path={edgePath}
-          markerEnd={isEr ? undefined : markerEnd}
+          markerEnd={isEr ? undefined : `url(#${markerId})`}
           style={{
             stroke: strokeColor,
             strokeWidth,

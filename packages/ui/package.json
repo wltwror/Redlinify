@@ -1,6 +1,9 @@
 {
   "name": "@redlinify/ui",
   "version": "0.1.0",
+  "description": "Interactive React Flow + ELK browser workbench UI for Redlinify.",
+  "license": "MIT",
+  "author": "Vojtěch Faltus",
   "private": true,
   "type": "module",
   "scripts": {

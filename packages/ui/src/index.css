@@ -2,6 +2,116 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+  --rl-slate-50: 2 6 23;
+  --rl-slate-100: 15 23 42;
+  --rl-slate-200: 30 41 59;
+  --rl-slate-300: 51 65 85;
+  --rl-slate-400: 71 85 105;
+  --rl-slate-500: 100 116 139;
+  --rl-slate-600: 118 131 149;
+  --rl-slate-700: 203 213 225;
+  --rl-slate-800: 226 232 240;
+  --rl-slate-900: 255 255 255;
+  --rl-slate-950: 241 245 249;
+
+  --rl-sky-100: 12 74 110;
+  --rl-sky-200: 7 89 133;
+  --rl-sky-300: 3 105 161;
+  --rl-sky-400: 2 132 199;
+  --rl-sky-500: 3 105 161;
+  --rl-sky-950: 224 242 254;
+
+  --rl-amber-100: 120 53 15;
+  --rl-amber-200: 146 64 14;
+  --rl-amber-300: 180 83 9;
+  --rl-amber-400: 217 119 6;
+  --rl-amber-500: 180 83 9;
+  --rl-amber-950: 254 243 199;
+
+  --rl-emerald-100: 6 78 59;
+  --rl-emerald-200: 6 95 70;
+  --rl-emerald-300: 4 120 87;
+  --rl-emerald-400: 5 150 105;
+  --rl-emerald-500: 4 120 87;
+  --rl-emerald-950: 209 250 229;
+
+  --rl-rose-100: 136 19 55;
+  --rl-rose-200: 159 18 57;
+  --rl-rose-300: 190 18 60;
+  --rl-rose-400: 225 29 72;
+  --rl-rose-500: 225 29 72;
+  --rl-rose-600: 225 29 72;
+  --rl-rose-950: 255 228 230;
+
+  --rl-violet-300: 109 40 217;
+  --rl-violet-500: 124 58 237;
+
+  --rl-teal-300: 15 118 110;
+  --rl-teal-500: 13 148 136;
+
+  --rl-canvas-bg: #f1f5f9;
+  --rl-edge-default: #64748b;
+  --rl-edge-selected: #0284c7;
+  --rl-edge-locked: #d97706;
+}
+
+html.dark {
+  color-scheme: dark;
+  --rl-slate-50: 248 250 252;
+  --rl-slate-100: 241 245 249;
+  --rl-slate-200: 226 232 240;
+  --rl-slate-300: 203 213 225;
+  --rl-slate-400: 148 163 184;
+  --rl-slate-500: 100 116 139;
+  --rl-slate-600: 71 85 105;
+  --rl-slate-700: 51 65 85;
+  --rl-slate-800: 30 41 59;
+  --rl-slate-900: 15 23 42;
+  --rl-slate-950: 2 6 23;
+
+  --rl-sky-100: 224 242 254;
+  --rl-sky-200: 186 230 253;
+  --rl-sky-300: 125 211 252;
+  --rl-sky-400: 56 189 248;
+  --rl-sky-500: 14 165 233;
+  --rl-sky-950: 8 47 73;
+
+  --rl-amber-100: 254 243 199;
+  --rl-amber-200: 253 230 138;
+  --rl-amber-300: 252 211 77;
+  --rl-amber-400: 251 191 36;
+  --rl-amber-500: 245 158 11;
+  --rl-amber-950: 69 26 3;
+
+  --rl-emerald-100: 209 250 229;
+  --rl-emerald-200: 167 243 208;
+  --rl-emerald-300: 110 231 183;
+  --rl-emerald-400: 52 211 153;
+  --rl-emerald-500: 16 185 129;
+  --rl-emerald-950: 2 44 34;
+
+  --rl-rose-100: 255 228 230;
+  --rl-rose-200: 254 205 211;
+  --rl-rose-300: 253 164 175;
+  --rl-rose-400: 251 113 133;
+  --rl-rose-500: 244 63 94;
+  --rl-rose-600: 225 29 72;
+  --rl-rose-950: 76 5 25;
+
+  --rl-violet-300: 196 181 253;
+  --rl-violet-500: 139 92 246;
+
+  --rl-teal-300: 94 234 212;
+  --rl-teal-500: 20 184 166;
+
+  --rl-canvas-bg: #020617;
+  --rl-edge-default: #64748b;
+  --rl-edge-selected: #38bdf8;
+  --rl-edge-locked: #f59e0b;
+}
+
 html,
 body,
 #root {
@@ -10,40 +120,44 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: #020617;
-  color: #f1f5f9;
+  background-color: rgb(var(--rl-slate-950));
+  color: rgb(var(--rl-slate-100));
 }
 
 .react-flow__controls {
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid #334155;
+  background: rgb(var(--rl-slate-900) / 0.94);
+  border: 1px solid rgb(var(--rl-slate-700));
   border-radius: 0.5rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.22);
   overflow: hidden;
 }
 
 .react-flow__controls-button {
   background: transparent;
-  border-bottom: 1px solid #1e293b;
-  color: #cbd5e1;
-  fill: #cbd5e1;
+  border-bottom: 1px solid rgb(var(--rl-slate-800));
+  color: rgb(var(--rl-slate-300));
+  fill: rgb(var(--rl-slate-300));
 }
 
 .react-flow__controls-button:hover {
-  background: #1e293b;
-  color: #f8fafc;
+  background: rgb(var(--rl-slate-800));
+  color: rgb(var(--rl-slate-50));
 }
 
 .react-flow__minimap {
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid #334155;
+  background: rgb(var(--rl-slate-900) / 0.94);
+  border: 1px solid rgb(var(--rl-slate-700));
   border-radius: 0.5rem;
 }
 
 .react-flow__attribution {
-  background: rgba(2, 6, 23, 0.7) !important;
-  color: #64748b !important;
+  background: rgb(var(--rl-slate-950) / 0.75) !important;
+  color: rgb(var(--rl-slate-500)) !important;
   font-size: 10px !important;
+}
+
+.react-flow__edge.selected {
+  z-index: 1000 !important;
 }
 
 @keyframes redlinify-pulse {

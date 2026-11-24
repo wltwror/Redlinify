@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Redlinify — Collaborative Design Workbench</title>
+    <script>
+      try {
+        if (localStorage.getItem("redlinify-theme") === "light") {
+          document.documentElement.classList.remove("dark");
+        }
+      } catch {}
+    </script>
     <link
       rel="icon"
       type="image/svg+xml"

@@ -1,6 +1,21 @@
 {
   "name": "@redlinify/shared",
   "version": "0.1.0",
+  "description": "Shared Zod schemas, canonical hashing, semantic diff engine, and locked atomic storage for Redlinify.",
+  "license": "MIT",
+  "author": "Vojtěch Faltus",
+  "keywords": [
+    "redlinify",
+    "mcp",
+    "semantic-diff",
+    "zod",
+    "architecture"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -1,11 +1,24 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DesignStorage, findProjectRoot } from "@redlinify/shared";
 import { createRedlinifyMcpServer } from "./mcp.js";
 import { createWebServer } from "./web.js";
+
+function readPackageVersion(): string {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.resolve(here, "../package.json");
+    const parsed = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+      version?: unknown;
+    };
+    return typeof parsed.version === "string" ? parsed.version : "0.1.0";
+  } catch {
+    return "0.1.0";
+  }
+}
 
 function parseArgs(argv: string[]): {
   command: string | undefined;
@@ -44,17 +57,23 @@ function resolveUiDistDir(): string | undefined {
 }
 
 function printHelp(): void {
-  process.stderr.write(`Redlinify CLI
+  process.stderr.write(`Redlinify CLI v${readPackageVersion()}
 
 Usage:
   redlinify init [--dir <path>] [--name <project_name>]
   redlinify mcp  [--dir <path>]
   redlinify ui   [--dir <path>] [--port 4173] [--host 127.0.0.1]
+  redlinify --version | -v
+  redlinify --help | -h
 `);
 }
 
 async function main(): Promise<void> {
   const { command, flags } = parseArgs(process.argv.slice(2));
+  if (command === "--version" || command === "-v" || command === "version") {
+    process.stdout.write(`${readPackageVersion()}\n`);
+    return;
+  }
   if (!command || command === "--help" || command === "-h" || command === "help") {
     printHelp();
     process.exit(command ? 0 : 1);
@@ -98,12 +117,27 @@ async function main(): Promise<void> {
       );
     }
 
-    const running = await createWebServer({
-      storage,
-      host,
-      port,
-      uiDistDir,
-    });
+    let running;
+    try {
+      running = await createWebServer({
+        storage,
+        host,
+        port,
+        uiDistDir,
+      });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as NodeJS.ErrnoException).code === "EADDRINUSE"
+      ) {
+        process.stderr.write(
+          `[redlinify ui] Port ${port} on ${host} is already in use. Choose another port with --port <number>.\n`,
+        );
+        process.exit(1);
+      }
+      throw err;
+    }
     process.stdout.write(
       `Redlinify UI listening at ${running.url} (project root: ${rootDir})\n`,
     );

@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   Background,
   BackgroundVariant,
   ConnectionMode,
   Controls,
-  MarkerType,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -69,6 +75,9 @@ import { TriageBar, type TriageFilter } from "./TriageBar";
 
 const nodeTypes = { structured: StructuredNode };
 const edgeTypes = { step: StepEdge };
+const MULTI_SELECTION_KEY_CODE = ["Control", "Meta"];
+const DELETE_KEY_CODE = ["Backspace", "Delete"];
+const PRO_OPTIONS = { hideAttribution: true };
 
 interface ToastState {
   id: number;
@@ -122,8 +131,6 @@ function WorkbenchInner() {
     useState<WorkspaceDrawerTab>("questions");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
-  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -135,6 +142,9 @@ function WorkbenchInner() {
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [routingTick, setRoutingTick] = useState(0);
   const [historyTick, setHistoryTick] = useState(0);
+  const [theme, setTheme] = useState<"dark" | "light">(() =>
+    document.documentElement.classList.contains("dark") ? "dark" : "light",
+  );
 
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
@@ -148,15 +158,43 @@ function WorkbenchInner() {
   const activeViewIdRef = useRef<string | null>(null);
   const activeViewRef = useRef<DesignView | null>(null);
   const viewHashRef = useRef<string | undefined>(undefined);
-  const selectedNodeIdsRef = useRef<string[]>([]);
-  const selectedEdgeIdsRef = useRef<string[]>([]);
+  const lastSyncedNodesViewIdRef = useRef<string | null>(null);
+  const lastSyncedEdgesViewIdRef = useRef<string | null>(null);
+  const pendingSelectNodeIdRef = useRef<string | null>(null);
+  const pendingSelectEdgeIdRef = useRef<string | null>(null);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   activeViewIdRef.current = activeViewId;
   activeViewRef.current = activeView;
   viewHashRef.current = viewHash;
-  selectedNodeIdsRef.current = selectedNodeIds;
-  selectedEdgeIdsRef.current = selectedEdgeIds;
+
+  const selectedNodeIds = useMemo(
+    () => rfNodes.filter((n) => n.selected).map((n) => n.id),
+    [rfNodes],
+  );
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    try {
+      localStorage.setItem("redlinify-theme", theme);
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  }, []);
+
+  useEffect(() => {
+    if (selectedNodeIds.length > 1) {
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setDrawerMode((curr) =>
+        curr === "node" || curr === "edge" ? "none" : curr,
+      );
+    }
+  }, [selectedNodeIds.length]);
 
   const showToast = useCallback(
     (message: string, tone: "info" | "warning" | "error" = "info") => {
@@ -558,12 +596,68 @@ function WorkbenchInner() {
     [persistView],
   );
 
-  const handleOpenNodeThreads = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-    setSelectedEdgeId(null);
-    setDrawerMode("node");
-    setElementTab("threads");
-  }, []);
+  const selectSingleNode = useCallback(
+    (nodeId: string | null) => {
+      setSelectedNodeId(nodeId);
+      setSelectedEdgeId(null);
+      setRfNodes((prev) => {
+        let changed = false;
+        const next = prev.map((n) => {
+          const shouldSelect = nodeId !== null && n.id === nodeId;
+          if (Boolean(n.selected) === shouldSelect) return n;
+          changed = true;
+          return { ...n, selected: shouldSelect };
+        });
+        return changed ? next : prev;
+      });
+      setRfEdges((prev) => {
+        let changed = false;
+        const next = prev.map((edge) => {
+          if (!edge.selected) return edge;
+          changed = true;
+          return { ...edge, selected: false };
+        });
+        return changed ? next : prev;
+      });
+    },
+    [setRfEdges, setRfNodes],
+  );
+
+  const selectSingleEdge = useCallback(
+    (edgeId: string | null) => {
+      setSelectedEdgeId(edgeId);
+      setSelectedNodeId(null);
+      setRfNodes((prev) => {
+        let changed = false;
+        const next = prev.map((n) => {
+          if (!n.selected) return n;
+          changed = true;
+          return { ...n, selected: false };
+        });
+        return changed ? next : prev;
+      });
+      setRfEdges((prev) => {
+        let changed = false;
+        const next = prev.map((edge) => {
+          const shouldSelect = edgeId !== null && edge.id === edgeId;
+          if (Boolean(edge.selected) === shouldSelect) return edge;
+          changed = true;
+          return { ...edge, selected: shouldSelect };
+        });
+        return changed ? next : prev;
+      });
+    },
+    [setRfEdges, setRfNodes],
+  );
+
+  const handleOpenNodeThreads = useCallback(
+    (nodeId: string) => {
+      selectSingleNode(nodeId);
+      setDrawerMode("node");
+      setElementTab("threads");
+    },
+    [selectSingleNode],
+  );
 
   const handleCommitWaypoints = useCallback(
     (edgeId: string, waypoints: Point[]) => {
@@ -628,6 +722,7 @@ function WorkbenchInner() {
 
   useEffect(() => {
     if (!activeView) {
+      lastSyncedNodesViewIdRef.current = null;
       setRfNodes([]);
       return;
     }
@@ -636,47 +731,62 @@ function WorkbenchInner() {
       (t) => t.status === "open" && t.view_id === activeView.id,
     );
 
-    const nextNodes: StructuredFlowNode[] = activeView.nodes.map((node) => {
-      const nodeThreads = viewThreads.filter(
-        (t) => t.target_type === "node" && t.target_id === node.id,
-      );
-      const waitingOnHumanCount = nodeThreads.filter(
-        isThreadWaitingOnHuman,
-      ).length;
-      const isEdited = editedNodeIds.has(node.id);
+    const pendingSelectId = pendingSelectNodeIdRef.current;
+    pendingSelectNodeIdRef.current = null;
+    const sameView = lastSyncedNodesViewIdRef.current === activeView.id;
+    lastSyncedNodesViewIdRef.current = activeView.id;
 
-      let matchesFilter = true;
-      if (filter === "waiting_on_me") matchesFilter = waitingOnHumanCount > 0;
-      else if (filter === "my_edits") matchesFilter = isEdited;
-      else if (filter === "locked") matchesFilter = node.locked;
-      else if (filter === "drifted") matchesFilter = node.status === "drifted";
+    setRfNodes((prev) => {
+      const prevById = sameView
+        ? new Map(prev.map((n) => [n.id, n]))
+        : new Map<string, StructuredFlowNode>();
 
-      return {
-        id: node.id,
-        type: "structured",
-        position: positionsRef.current[node.id] ?? { x: 40, y: 40 },
-        selected: selectedNodeIdsRef.current.includes(node.id),
-        data: {
-          node,
-          diagramType: activeView.diagram_type ?? "general",
-          isHumanEdited: isEdited,
-          waitingOnHumanCount,
-          totalOpenThreads: nodeThreads.length,
-          dimmed: !matchesFilter,
-          pulsing: pulsingNodeId === node.id,
-          onToggleLock: handleToggleLock,
-          onInlineUpdateTitle: handleInlineUpdateTitle,
-          onInlineUpdateItem: handleInlineUpdateItem,
-          onInlineAddItem: handleInlineAddItem,
-          onInlineToggleFieldNullable: handleInlineToggleFieldNullable,
-          onInlineUpdateFieldName: handleInlineUpdateFieldName,
-          onInlineAddField: handleInlineAddField,
-          onOpenNodeThreads: handleOpenNodeThreads,
-        },
-      };
+      return activeView.nodes.map((node) => {
+        const nodeThreads = viewThreads.filter(
+          (t) => t.target_type === "node" && t.target_id === node.id,
+        );
+        const waitingOnHumanCount = nodeThreads.filter(
+          isThreadWaitingOnHuman,
+        ).length;
+        const isEdited = editedNodeIds.has(node.id);
+
+        let matchesFilter = true;
+        if (filter === "waiting_on_me") matchesFilter = waitingOnHumanCount > 0;
+        else if (filter === "my_edits") matchesFilter = isEdited;
+        else if (filter === "locked") matchesFilter = node.locked;
+        else if (filter === "drifted") matchesFilter = node.status === "drifted";
+
+        const existing = prevById.get(node.id);
+        const selected = pendingSelectId
+          ? node.id === pendingSelectId
+          : Boolean(existing?.selected);
+
+        return {
+          ...(existing ?? {}),
+          id: node.id,
+          type: "structured",
+          position: positionsRef.current[node.id] ?? { x: 40, y: 40 },
+          selected,
+          data: {
+            node,
+            diagramType: activeView.diagram_type ?? "general",
+            isHumanEdited: isEdited,
+            waitingOnHumanCount,
+            totalOpenThreads: nodeThreads.length,
+            dimmed: !matchesFilter,
+            pulsing: pulsingNodeId === node.id,
+            onToggleLock: handleToggleLock,
+            onInlineUpdateTitle: handleInlineUpdateTitle,
+            onInlineUpdateItem: handleInlineUpdateItem,
+            onInlineAddItem: handleInlineAddItem,
+            onInlineToggleFieldNullable: handleInlineToggleFieldNullable,
+            onInlineUpdateFieldName: handleInlineUpdateFieldName,
+            onInlineAddField: handleInlineAddField,
+            onOpenNodeThreads: handleOpenNodeThreads,
+          },
+        };
+      });
     });
-
-    setRfNodes(nextNodes);
   }, [
     activeView,
     allThreads,
@@ -692,14 +802,13 @@ function WorkbenchInner() {
     handleToggleLock,
     layoutVersion,
     pulsingNodeId,
-    selectedNodeId,
-    selectedNodeIds,
     setRfNodes,
   ]);
 
   // Sync DesignView + smart routing -> React Flow edges (runs smoothly on drag too!)
   useEffect(() => {
     if (!activeView) {
+      lastSyncedEdgesViewIdRef.current = null;
       setRfEdges([]);
       return;
     }
@@ -728,42 +837,48 @@ function WorkbenchInner() {
       edgeRoutesRef.current,
     );
 
-    const nextEdges: StepFlowEdge[] = activeView.edges.map((edge) => {
-      const route = routing[edge.id];
-      const diagramType = activeView.diagram_type ?? "general";
-      const isSelected = selectedEdgeIdsRef.current.includes(edge.id);
-      return {
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: route?.sourceHandle ?? "right",
-        targetHandle: route?.targetHandle ?? "left",
-        type: "step",
-        selected: isSelected,
-        zIndex: isSelected ? 1000 : 1,
-        markerEnd:
-          diagramType === "er"
-            ? undefined
-            : {
-                type: MarkerType.ArrowClosed,
-                color: isSelected ? "#38bdf8" : "#64748b",
-              },
-        data: {
-          edge,
-          diagramType,
-          dimmed:
-            dimmedNodeIds.has(edge.source) && dimmedNodeIds.has(edge.target),
-          sourcePortOffset: route?.sourcePortOffset ?? 0,
-          targetPortOffset: route?.targetPortOffset ?? 0,
-          manualWaypoints: route?.manualWaypoints ?? [],
-          autoWaypoints: route?.autoWaypoints ?? [],
-          curveOffset: route?.curveOffset ?? { x: 0, y: 0 },
-          onCommitWaypoints: handleCommitWaypoints,
-        },
-      };
-    });
+    const pendingSelectId = pendingSelectEdgeIdRef.current;
+    pendingSelectEdgeIdRef.current = null;
+    const sameView = lastSyncedEdgesViewIdRef.current === activeView.id;
+    lastSyncedEdgesViewIdRef.current = activeView.id;
 
-    setRfEdges(nextEdges);
+    setRfEdges((prev) => {
+      const prevById = sameView
+        ? new Map(prev.map((e) => [e.id, e]))
+        : new Map<string, StepFlowEdge>();
+
+      return activeView.edges.map((edge) => {
+        const route = routing[edge.id];
+        const diagramType = activeView.diagram_type ?? "general";
+        const existing = prevById.get(edge.id);
+        const selected = pendingSelectId
+          ? edge.id === pendingSelectId
+          : Boolean(existing?.selected);
+
+        return {
+          ...(existing ?? {}),
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: route?.sourceHandle ?? "right",
+          targetHandle: route?.targetHandle ?? "left",
+          type: "step",
+          selected,
+          data: {
+            edge,
+            diagramType,
+            dimmed:
+              dimmedNodeIds.has(edge.source) && dimmedNodeIds.has(edge.target),
+            sourcePortOffset: route?.sourcePortOffset ?? 0,
+            targetPortOffset: route?.targetPortOffset ?? 0,
+            manualWaypoints: route?.manualWaypoints ?? [],
+            autoWaypoints: route?.autoWaypoints ?? [],
+            curveOffset: route?.curveOffset ?? { x: 0, y: 0 },
+            onCommitWaypoints: handleCommitWaypoints,
+          },
+        };
+      });
+    });
   }, [
     activeView,
     allThreads,
@@ -772,18 +887,13 @@ function WorkbenchInner() {
     handleCommitWaypoints,
     layoutVersion,
     routingTick,
-    selectedEdgeId,
-    selectedEdgeIds,
     setRfEdges,
   ]);
 
   const handleSelectView = useCallback(
     async (viewId: string) => {
       setActiveViewId(viewId);
-      setSelectedNodeId(null);
-      setSelectedEdgeId(null);
-      setSelectedNodeIds([]);
-      setSelectedEdgeIds([]);
+      selectSingleNode(null);
       setContextMenu(null);
       if (drawerMode === "node" || drawerMode === "edge") {
         setDrawerMode("none");
@@ -791,7 +901,7 @@ function WorkbenchInner() {
       window.location.hash = `view=${encodeURIComponent(viewId)}`;
       await loadViewDetail(viewId);
     },
-    [drawerMode, loadViewDetail],
+    [drawerMode, loadViewDetail, selectSingleNode],
   );
 
   const handleJumpToTarget = useCallback(
@@ -802,16 +912,17 @@ function WorkbenchInner() {
       preferredTab?: ElementDrawerTab,
     ) => {
       if (viewId && viewId !== activeViewIdRef.current) {
+        pendingSelectNodeIdRef.current =
+          targetType === "node" && targetId ? targetId : null;
+        pendingSelectEdgeIdRef.current =
+          targetType === "edge" && targetId ? targetId : null;
         setActiveViewId(viewId);
         window.location.hash = `view=${encodeURIComponent(viewId)}`;
         await loadViewDetail(viewId);
       }
 
       if (targetType === "node" && targetId) {
-        setSelectedNodeId(targetId);
-        setSelectedEdgeId(null);
-        setSelectedNodeIds([targetId]);
-        setSelectedEdgeIds([]);
+        selectSingleNode(targetId);
         setDrawerMode("node");
         setElementTab(preferredTab ?? "links");
         setPulsingNodeId(targetId);
@@ -823,20 +934,18 @@ function WorkbenchInner() {
           void setCenter(pos.x + 150, pos.y + 90, { zoom: 1, duration: 280 });
         }
       } else if (targetType === "edge" && targetId) {
-        setSelectedEdgeId(targetId);
-        setSelectedNodeId(null);
+        selectSingleEdge(targetId);
         setDrawerMode("edge");
         setElementTab(
           preferredTab === "links" ? "spec" : (preferredTab ?? "threads"),
         );
       } else {
-        setSelectedNodeId(null);
-        setSelectedEdgeId(null);
+        selectSingleNode(null);
         setDrawerMode("workspace");
         setWorkspaceTab("adrs");
       }
     },
-    [loadViewDetail, setCenter],
+    [loadViewDetail, selectSingleEdge, selectSingleNode, setCenter],
   );
 
   const createBoxAtPosition = useCallback(
@@ -898,15 +1007,21 @@ function WorkbenchInner() {
         ...activeView,
         nodes: [...activeView.nodes, newNode],
       };
+      pendingSelectNodeIdRef.current = id;
       await persistCurrentLayout(activeView.id);
       await persistView(nextView);
       setLayoutVersion((v) => v + 1);
-      setSelectedNodeId(id);
-      setSelectedEdgeId(null);
+      selectSingleNode(id);
       setDrawerMode("node");
       setElementTab("spec");
     },
-    [activeView, persistCurrentLayout, persistView, screenToFlowPosition],
+    [
+      activeView,
+      persistCurrentLayout,
+      persistView,
+      screenToFlowPosition,
+      selectSingleNode,
+    ],
   );
 
   const handleAutoLayout = useCallback(async () => {
@@ -1385,8 +1500,7 @@ function WorkbenchInner() {
           id: "spec",
           label: "Edit in Spec Drawer",
           onSelect: () => {
-            setSelectedNodeId(node.id);
-            setSelectedEdgeId(null);
+            selectSingleNode(node.id);
             setDrawerMode("node");
             setElementTab("spec");
           },
@@ -1546,6 +1660,7 @@ function WorkbenchInner() {
     historyTick,
     persistCurrentLayout,
     persistView,
+    selectSingleNode,
     selectedEdgeId,
     selectedNodeId,
     showToast,
@@ -1592,6 +1707,120 @@ function WorkbenchInner() {
     );
   }, [activeView, historyTick]);
 
+  const handleConnect = useCallback((conn: Connection) => {
+    if (conn.source && conn.target) {
+      setPendingConn(conn);
+    }
+  }, []);
+
+  const handleReconnectCallback = useCallback(
+    (oldEdge: Edge, newConn: Connection) => {
+      void handleReconnect(oldEdge, newConn);
+    },
+    [handleReconnect],
+  );
+
+  const handleSelectionDragStop = useCallback(
+    (_evt: unknown, nodes: StructuredFlowNode[]) => {
+      finalizeDraggedNodes(nodes);
+    },
+    [finalizeDraggedNodes],
+  );
+
+  const handleNodeClick = useCallback(
+    (e: ReactMouseEvent, node: StructuredFlowNode) => {
+      setContextMenu(null);
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      setSelectedNodeId(node.id);
+      setSelectedEdgeId(null);
+      setDrawerMode("node");
+    },
+    [],
+  );
+
+  const handleEdgeClick = useCallback(
+    (e: ReactMouseEvent, edge: StepFlowEdge) => {
+      setContextMenu(null);
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      setSelectedEdgeId(edge.id);
+      setSelectedNodeId(null);
+      setDrawerMode("edge");
+      if (elementTab === "links") setElementTab("spec");
+    },
+    [elementTab],
+  );
+
+  const handlePaneClick = useCallback(() => {
+    setContextMenu(null);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    if (drawerMode === "node" || drawerMode === "edge") {
+      setDrawerMode("none");
+    }
+  }, [drawerMode]);
+
+  const handlePaneContextMenu = useCallback(
+    (e: MouseEvent | ReactMouseEvent) => {
+      e.preventDefault();
+      setContextMenu({
+        kind: "pane",
+        x: e.clientX,
+        y: e.clientY,
+        flowPos: screenToFlowPosition({
+          x: e.clientX,
+          y: e.clientY,
+        }),
+      });
+    },
+    [screenToFlowPosition],
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (e: ReactMouseEvent, node: StructuredFlowNode) => {
+      e.preventDefault();
+      selectSingleNode(node.id);
+      setContextMenu({
+        kind: "node",
+        x: e.clientX,
+        y: e.clientY,
+        nodeId: node.id,
+      });
+    },
+    [selectSingleNode],
+  );
+
+  const handleEdgeContextMenu = useCallback(
+    (e: ReactMouseEvent, edge: StepFlowEdge) => {
+      e.preventDefault();
+      selectSingleEdge(edge.id);
+      setContextMenu({
+        kind: "edge",
+        x: e.clientX,
+        y: e.clientY,
+        edgeId: edge.id,
+        flowPos: screenToFlowPosition({
+          x: e.clientX,
+          y: e.clientY,
+        }),
+      });
+    },
+    [screenToFlowPosition, selectSingleEdge],
+  );
+
+  const miniMapNodeColor = useCallback(
+    (n: StructuredFlowNode) => {
+      const data = n.data as { node?: DesignNode } | undefined;
+      if (data?.node?.status === "drifted") {
+        return theme === "dark" ? "#f43f5e" : "#e11d48";
+      }
+      if (data?.node?.locked) {
+        return theme === "dark" ? "#f59e0b" : "#d97706";
+      }
+      return theme === "dark" ? "#38bdf8" : "#0284c7";
+    },
+    [theme],
+  );
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
       <TabBar
@@ -1627,6 +1856,8 @@ function WorkbenchInner() {
           await handleSelectView(created.view.id);
         }}
         onDeleteView={handleDeleteView}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       <TriageBar
@@ -1645,14 +1876,12 @@ function WorkbenchInner() {
         openQuestionsCount={openQuestionsCount}
         pendingAgentCount={pendingAgentCount}
         onOpenQuestions={() => {
-          setSelectedNodeId(null);
-          setSelectedEdgeId(null);
+          selectSingleNode(null);
           setDrawerMode("workspace");
           setWorkspaceTab("questions");
         }}
         onOpenPendingReview={() => {
-          setSelectedNodeId(null);
-          setSelectedEdgeId(null);
+          selectSingleNode(null);
           setDrawerMode("workspace");
           setWorkspaceTab("pending");
         }}
@@ -1701,135 +1930,45 @@ function WorkbenchInner() {
               edgeTypes={edgeTypes}
               connectionMode={ConnectionMode.Loose}
               edgesReconnectable
-              multiSelectionKeyCode={["Control", "Meta"]}
+              elevateEdgesOnSelect
+              multiSelectionKeyCode={MULTI_SELECTION_KEY_CODE}
               selectionKeyCode="Shift"
               onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeDragStart={snapshotDragOrigin}
               onNodeDragStop={handleNodeDragStop}
               onSelectionDragStart={snapshotDragOrigin}
-              onSelectionDragStop={(_evt, nodes) => finalizeDraggedNodes(nodes)}
-              onSelectionChange={({ nodes, edges }) => {
-                const nextNodeIds = nodes.map((n) => n.id);
-                const nextEdgeIds = edges.map((e) => e.id);
-                const sameNodes =
-                  nextNodeIds.length === selectedNodeIdsRef.current.length &&
-                  nextNodeIds.every((id, i) => id === selectedNodeIdsRef.current[i]);
-                const sameEdges =
-                  nextEdgeIds.length === selectedEdgeIdsRef.current.length &&
-                  nextEdgeIds.every((id, i) => id === selectedEdgeIdsRef.current[i]);
-                if (!sameNodes) setSelectedNodeIds(nextNodeIds);
-                if (!sameEdges) setSelectedEdgeIds(nextEdgeIds);
-                if (nextNodeIds.length > 1) {
-                  setSelectedNodeId(null);
-                  setSelectedEdgeId(null);
-                  setDrawerMode((curr) => (curr === "node" || curr === "edge" ? "none" : curr));
-                } else if (nextNodeIds.length === 1 && nextEdgeIds.length === 0) {
-                  setSelectedNodeId(nextNodeIds[0]!);
-                  setSelectedEdgeId(null);
-                } else if (nextEdgeIds.length === 1 && nextNodeIds.length === 0) {
-                  setSelectedEdgeId(nextEdgeIds[0]!);
-                  setSelectedNodeId(null);
-                }
-              }}
+              onSelectionDragStop={handleSelectionDragStop}
               onMoveEnd={handleMoveEnd}
-              onReconnect={(oldEdge, newConn) =>
-                void handleReconnect(oldEdge, newConn)
-              }
+              onReconnect={handleReconnectCallback}
               onBeforeDelete={handleBeforeDelete}
-              onConnect={(conn) => {
-                if (conn.source && conn.target) {
-                  setPendingConn(conn);
-                }
-              }}
-              onNodeClick={(e, node) => {
-                setContextMenu(null);
-                if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-                setSelectedNodeId(node.id);
-                setSelectedEdgeId(null);
-                setSelectedNodeIds([node.id]);
-                setSelectedEdgeIds([]);
-                setDrawerMode("node");
-              }}
-              onEdgeClick={(e, edge) => {
-                setContextMenu(null);
-                if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-                setSelectedEdgeId(edge.id);
-                setSelectedNodeId(null);
-                setSelectedEdgeIds([edge.id]);
-                setSelectedNodeIds([]);
-                setDrawerMode("edge");
-                if (elementTab === "links") setElementTab("spec");
-              }}
-              onPaneClick={() => {
-                setContextMenu(null);
-                setSelectedNodeId(null);
-                setSelectedEdgeId(null);
-                setSelectedNodeIds([]);
-                setSelectedEdgeIds([]);
-                if (drawerMode === "node" || drawerMode === "edge") {
-                  setDrawerMode("none");
-                }
-              }}
-              onPaneContextMenu={(e) => {
-                e.preventDefault();
-                setContextMenu({
-                  kind: "pane",
-                  x: e.clientX,
-                  y: e.clientY,
-                  flowPos: screenToFlowPosition({
-                    x: e.clientX,
-                    y: e.clientY,
-                  }),
-                });
-              }}
-              onNodeContextMenu={(e, node) => {
-                e.preventDefault();
-                setSelectedNodeId(node.id);
-                setSelectedEdgeId(null);
-                setContextMenu({
-                  kind: "node",
-                  x: e.clientX,
-                  y: e.clientY,
-                  nodeId: node.id,
-                });
-              }}
-              onEdgeContextMenu={(e, edge) => {
-                e.preventDefault();
-                setSelectedEdgeId(edge.id);
-                setSelectedNodeId(null);
-                setContextMenu({
-                  kind: "edge",
-                  x: e.clientX,
-                  y: e.clientY,
-                  edgeId: edge.id,
-                  flowPos: screenToFlowPosition({
-                    x: e.clientX,
-                    y: e.clientY,
-                  }),
-                });
-              }}
-              deleteKeyCode={["Backspace", "Delete"]}
+              onConnect={handleConnect}
+              onNodeClick={handleNodeClick}
+              onEdgeClick={handleEdgeClick}
+              onPaneClick={handlePaneClick}
+              onPaneContextMenu={handlePaneContextMenu}
+              onNodeContextMenu={handleNodeContextMenu}
+              onEdgeContextMenu={handleEdgeContextMenu}
+              deleteKeyCode={DELETE_KEY_CODE}
               minZoom={0.2}
               maxZoom={2}
-              proOptions={{ hideAttribution: true }}
+              proOptions={PRO_OPTIONS}
             >
               <Background
                 variant={BackgroundVariant.Dots}
                 gap={22}
                 size={1.2}
-                color="#1e293b"
+                color={theme === "dark" ? "#1e293b" : "#cbd5e1"}
               />
               <Controls showInteractive={false} />
               <MiniMap
                 className="hidden sm:block"
-                nodeColor={(n) => {
-                  const data = n.data as { node?: DesignNode } | undefined;
-                  if (data?.node?.status === "drifted") return "#f43f5e";
-                  if (data?.node?.locked) return "#f59e0b";
-                  return "#38bdf8";
-                }}
-                maskColor="rgba(2, 6, 23, 0.75)"
+                nodeColor={miniMapNodeColor}
+                maskColor={
+                  theme === "dark"
+                    ? "rgba(2, 6, 23, 0.75)"
+                    : "rgba(241, 245, 249, 0.72)"
+                }
               />
             </ReactFlow>
           )}
