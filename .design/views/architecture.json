@@ -1,0 +1,190 @@
+{
+  "id": "architecture",
+  "title": "System Architecture",
+  "direction": "LR",
+  "nodes": [
+    {
+      "id": "coding_agent",
+      "entity_ref": "coding_agent",
+      "kind": "Actor",
+      "title": "Coding Agent",
+      "summary": "AI coding assistant collaborating via MCP tools",
+      "status": "approved",
+      "locked": true,
+      "sections": [
+        {
+          "id": "workflow",
+          "heading": "MCP Workflow",
+          "items": [
+            "get_workspace_status()",
+            "upsert_view() / patch_view()",
+            "get_pending_feedback()",
+            "sync_code_refs()"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mcp_server",
+      "entity_ref": "mcp_server",
+      "kind": "Server",
+      "title": "MCP Server (stdio)",
+      "summary": "Exposes 9 coarse semantic tools over JSON-RPC stdio",
+      "status": "implemented",
+      "locked": true,
+      "sections": [
+        {
+          "id": "tools",
+          "heading": "Registered Tools",
+          "items": [
+            "get_workspace_status",
+            "get_view",
+            "get_pending_feedback",
+            "upsert_view / patch_view",
+            "acknowledge_feedback",
+            "post_thread_message",
+            "get_node_history / sync_code_refs"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/server/src/mcp.ts",
+          "symbol": "createRedlinifyMcpServer"
+        },
+        {
+          "path": "packages/server/src/cli.ts",
+          "symbol": "main"
+        }
+      ]
+    },
+    {
+      "id": "design_storage",
+      "entity_ref": "design_storage",
+      "kind": "Storage",
+      "title": "DesignStorage (.design/)",
+      "summary": "Locked atomic JSON persistence & semantic checkpoints",
+      "status": "implemented",
+      "locked": true,
+      "sections": [
+        {
+          "id": "git_truth",
+          "heading": "Git-Tracked Truth",
+          "items": [
+            "workspace.json",
+            "views/{view_id}.json",
+            "threads/{thread_id}.json"
+          ]
+        },
+        {
+          "id": "local_only",
+          "heading": "Gitignored State",
+          "items": [
+            ".layout/{view_id}.json",
+            ".checkpoint/{view_id}.json",
+            ".lock (cross-process mutex)"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/storage.ts",
+          "symbol": "DesignStorage"
+        }
+      ]
+    },
+    {
+      "id": "web_server",
+      "entity_ref": "web_server",
+      "kind": "Server",
+      "title": "Local HTTP + WS Server",
+      "summary": "Loopback REST API, static UI host & chokidar live sync",
+      "status": "implemented",
+      "locked": false,
+      "sections": [
+        {
+          "id": "endpoints",
+          "heading": "Transport & Sync",
+          "items": [
+            "127.0.0.1:4173 loopback bind",
+            "PUT /api/views/:id (base_hash)",
+            "chokidar self-echo suppression",
+            "WebSocket /ws live reload"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/server/src/web.ts",
+          "symbol": "createWebServer"
+        }
+      ]
+    },
+    {
+      "id": "browser_ui",
+      "entity_ref": "browser_ui",
+      "kind": "Frontend",
+      "title": "React Flow Workbench",
+      "summary": "Multi-tab dark canvas with ELK layout & triage drawer",
+      "status": "needs_input",
+      "locked": false,
+      "sections": [
+        {
+          "id": "features",
+          "heading": "Capabilities",
+          "items": [
+            "ELKjs TB/LR auto-layout",
+            "Double-click inline editing",
+            "Triage badges & filter bar",
+            "Cross-tab entity_ref jumps"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/ui/src/components/App.tsx",
+          "symbol": "App"
+        },
+        {
+          "path": "packages/ui/src/components/StructuredNode.tsx",
+          "symbol": "StructuredNode"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "arch_e1",
+      "source": "coding_agent",
+      "target": "mcp_server",
+      "label": "JSON-RPC stdio",
+      "step": 1,
+      "style": "solid"
+    },
+    {
+      "id": "arch_e2",
+      "source": "mcp_server",
+      "target": "design_storage",
+      "label": "locked atomic I/O",
+      "step": 2,
+      "style": "solid"
+    },
+    {
+      "id": "arch_e3",
+      "source": "design_storage",
+      "target": "web_server",
+      "label": "chokidar watch",
+      "step": 3,
+      "style": "dashed"
+    },
+    {
+      "id": "arch_e4",
+      "source": "web_server",
+      "target": "browser_ui",
+      "label": "REST + WebSocket",
+      "step": 4,
+      "style": "solid"
+    }
+  ],
+  "created_by": "agent"
+}

@@ -10,8 +10,8 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build -w @redlinify/shared && npm run build -w @redlinify/server && npm run build -w @redlinify/ui",
+    "typecheck": "npm run build -w @redlinify/shared && npm run typecheck -w @redlinify/server && npm run typecheck -w @redlinify/ui",
     "test": "vitest run",
     "test:watch": "vitest"
   },

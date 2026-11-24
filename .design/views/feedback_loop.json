@@ -1,0 +1,140 @@
+{
+  "id": "feedback_loop",
+  "title": "Agent Iteration Flow",
+  "direction": "LR",
+  "nodes": [
+    {
+      "id": "step_draft",
+      "entity_ref": "mcp_server",
+      "kind": "Stage",
+      "title": "1. Agent Drafts Views",
+      "status": "implemented",
+      "locked": false,
+      "sections": [
+        {
+          "id": "actions",
+          "heading": "MCP Calls",
+          "items": [
+            "get_workspace_status()",
+            "upsert_view() seeds checkpoint",
+            "post_thread_message() pins Qs"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "skill/SKILL.md"
+        }
+      ]
+    },
+    {
+      "id": "step_review",
+      "entity_ref": "browser_ui",
+      "kind": "Stage",
+      "title": "2. Human Redlines UI",
+      "status": "implemented",
+      "locked": false,
+      "sections": [
+        {
+          "id": "ui_actions",
+          "heading": "Browser Edits",
+          "items": [
+            "Edit boxes & edges inline",
+            "Lock approved architecture",
+            "Reply or request new views"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/ui/src/components/InspectorDrawer.tsx"
+        }
+      ]
+    },
+    {
+      "id": "step_diff",
+      "entity_ref": "semantic_diff",
+      "kind": "Stage",
+      "title": "3. Semantic Diff Sync",
+      "status": "needs_input",
+      "locked": false,
+      "sections": [
+        {
+          "id": "outputs",
+          "heading": "Feedback Payload",
+          "items": [
+            "Minimal node/section diffs",
+            "Open threads awaiting agent",
+            "Pending view_requests"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/storage.ts",
+          "symbol": "getPendingFeedback"
+        }
+      ]
+    },
+    {
+      "id": "step_code",
+      "entity_ref": "design_storage",
+      "kind": "Stage",
+      "title": "4. Implement & Sync Refs",
+      "status": "implemented",
+      "locked": false,
+      "sections": [
+        {
+          "id": "living_docs",
+          "heading": "Living Docs",
+          "items": [
+            "sync_code_refs() links files",
+            "Patches checkpoint status only",
+            "drift_alert if reality diverges"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/storage.ts",
+          "symbol": "syncCodeRefs"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "flow_e1",
+      "source": "step_draft",
+      "target": "step_review",
+      "label": "WS reload",
+      "step": 1,
+      "style": "solid"
+    },
+    {
+      "id": "flow_e2",
+      "source": "step_review",
+      "target": "step_diff",
+      "label": "get_pending_feedback()",
+      "step": 2,
+      "style": "solid"
+    },
+    {
+      "id": "flow_e3",
+      "source": "step_diff",
+      "target": "step_code",
+      "label": "patch_view() / ack",
+      "step": 3,
+      "style": "solid"
+    },
+    {
+      "id": "flow_e4",
+      "source": "step_code",
+      "target": "step_review",
+      "label": "implemented | drifted",
+      "step": 4,
+      "style": "dashed"
+    }
+  ],
+  "created_by": "agent"
+}

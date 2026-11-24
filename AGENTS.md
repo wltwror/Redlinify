@@ -7,20 +7,21 @@ This document captures architectural invariants, conventions, and verification c
 ## 1. Monorepo Layout
 
 * `SPEC.md` — Authoritative project specification across all 5 milestones.
-* `packages/shared` (`@redlinify/shared`) — Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage.
-* `packages/server` *(Milestone 2+)* — CLI (`redlinify init|mcp|ui`), stdio MCP server, and loopback HTTP/WebSocket server (`127.0.0.1:4173`).
-* `packages/ui` *(Milestone 3+)* — React 19 + Vite + `@xyflow/react` + `elkjs` browser workbench.
-* `skill/` *(Milestone 5)* — Agent workflow skill (`SKILL.md`).
+* `packages/shared` (`@redlinify/shared`) — Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
+* `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui`), stdio MCP server (9 tools), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
+* `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + `elkjs` + Tailwind CSS browser workbench.
+* `skill/SKILL.md` — Agent workflow skill instructions.
 
 ---
 
 ## 2. Core Invariants & Engineering Rules
 
-1. **Strict TypeScript + ESM (`NodeNext`)**:
-   * All packages use strict TypeScript extending `tsconfig.base.json` (`"module": "NodeNext"`, `"moduleResolution": "NodeNext"`).
-   * **Every relative import inside `src/` MUST use an explicit `.js` extension** (e.g. `import { DesignViewSchema } from "./schemas.js"`).
+1. **Strict TypeScript + ESM (`NodeNext` in backend packages)**:
+   * `packages/shared` and `packages/server` use `"module": "NodeNext"` and `"moduleResolution": "NodeNext"`.
+   * **Every relative import inside `packages/shared/src/` and `packages/server/src/` MUST use an explicit `.js` extension**.
+   * Browser code MUST import from `@redlinify/shared/browser`, never `@redlinify/shared` (which pulls `node:fs` / `node:child_process`).
 2. **Zod v3 Compatibility**:
-   * `@redlinify/shared` pins `zod` (`^3.24.2`, Zod v3) so `@modelcontextprotocol/sdk` consumes schemas directly without Zod v4 runtime mismatches.
+   * `@redlinify/shared` and `@redlinify/server` pin `zod` (`^3.24.2`, Zod v3) so `@modelcontextprotocol/sdk` consumes schemas directly without Zod v4 runtime mismatches. Note `.superRefine(...)` produces `ZodEffects` (no `.shape`).
 3. **Zero Pixel Coordinates in Shared Truth**:
    * `.design/workspace.json`, `.design/views/*.json`, and `.design/threads/*.json` are Git-tracked semantic truth and MUST NEVER contain layout positions (`x`, `y`) or viewport zoom.
    * Visual state lives solely in `.design/.layout/*.json` (gitignored).
@@ -34,8 +35,9 @@ This document captures architectural invariants, conventions, and verification c
    * `sync_code_refs` IS explicitly permitted to update `status` (`implemented | drifted`) and `code_refs` on `locked: true` nodes, and MUST patch **only** `status` and `code_refs` on those nodes inside `.design/.checkpoint/{view_id}.json` so unrelated pending human edits are never swallowed.
 6. **Missing-Checkpoint Baseline Resolution**:
    * When `.design/.checkpoint/{id}.json` does not exist: if `view.created_by === "human"`, treat baseline as `null`; otherwise fall back to `git show HEAD:.design/views/{id}.json`; if unavailable, seed checkpoint from current view.
-7. **Loopback Security Binding**:
-   * Any HTTP/WebSocket server (`redlinify ui`) MUST bind strictly to `127.0.0.1` (default port `4173`), never `0.0.0.0`.
+7. **Loopback Security Binding & Gateway HTTP Framing**:
+   * `redlinify ui` MUST bind strictly to `127.0.0.1` (default port `4173`), never `0.0.0.0`.
+   * All HTTP responses must explicitly set `Content-Length`, and request body reads must consume arbitrary chunked streams cleanly (`for await (const chunk of req)`).
 
 ---
 
@@ -43,7 +45,7 @@ This document captures architectural invariants, conventions, and verification c
 
 ```bash
 npm install         # Install workspace dependencies
-npm run typecheck   # Type-check all workspace packages
-npm run build       # Build all workspace packages
-npm test            # Run Vitest test suites
+npm run typecheck   # Type-check all workspace packages in topological order
+npm run build       # Build all workspace packages in topological order
+npm test            # Run Vitest test suites (shared + server)
 ```

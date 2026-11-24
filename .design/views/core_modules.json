@@ -1,0 +1,177 @@
+{
+  "id": "core_modules",
+  "title": "Shared Core Classes",
+  "direction": "TB",
+  "nodes": [
+    {
+      "id": "zod_schemas",
+      "entity_ref": "zod_schemas",
+      "kind": "Schema",
+      "title": "Zod v3 Schemas",
+      "summary": "Single source of truth for MCP, REST & UI types",
+      "status": "implemented",
+      "locked": true,
+      "sections": [
+        {
+          "id": "exports",
+          "heading": "Contracts",
+          "items": [
+            "DesignViewSchema",
+            "DesignThreadSchema",
+            "WorkspaceFileSchema",
+            "ViewPatchSchema",
+            "ID_SLUG_REGEX",
+            "ENTITY_REF_REGEX"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/schemas.ts",
+          "symbol": "DesignViewSchema"
+        }
+      ]
+    },
+    {
+      "id": "design_storage_cls",
+      "entity_ref": "design_storage",
+      "kind": "Class",
+      "title": "DesignStorage",
+      "summary": "Cross-process mutex, atomic writes & Git HEAD fallback",
+      "status": "implemented",
+      "locked": true,
+      "sections": [
+        {
+          "id": "methods",
+          "heading": "Methods",
+          "items": [
+            "withLock(fn)",
+            "upsertView(input)",
+            "patchView(input)",
+            "acknowledgeFeedback(entries)",
+            "syncCodeRefs(input)",
+            "postThreadMessage(input)",
+            "getPendingFeedback(viewId?)"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/storage.ts",
+          "symbol": "DesignStorage"
+        }
+      ]
+    },
+    {
+      "id": "semantic_diff",
+      "entity_ref": "semantic_diff",
+      "kind": "Engine",
+      "title": "Semantic Diff Engine",
+      "summary": "Token-efficient structural diff vs checkpoint",
+      "status": "implemented",
+      "locked": true,
+      "sections": [
+        {
+          "id": "rules",
+          "heading": "Invariants",
+          "items": [
+            "Ignores layout & JSON key order",
+            "Multiset item diffs per section",
+            "ID-first + unique heading match"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/diff.ts",
+          "symbol": "computeSemanticDiff"
+        }
+      ]
+    },
+    {
+      "id": "lock_guards",
+      "entity_ref": "lock_guards",
+      "kind": "Guards",
+      "title": "Lock & Patch Guards",
+      "summary": "Protects human-locked nodes/edges from agent mutations",
+      "status": "implemented",
+      "locked": false,
+      "sections": [
+        {
+          "id": "checks",
+          "heading": "Protections",
+          "items": [
+            "Blocks locked node/edge mutation",
+            "Blocks locked: true -> false",
+            "Preserves omitted code_refs",
+            "applyViewPatch() validation"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/guards.ts",
+          "symbol": "checkLockViolations"
+        }
+      ]
+    },
+    {
+      "id": "view_hash",
+      "entity_ref": "view_hash",
+      "kind": "Utility",
+      "title": "Canonical View Hash",
+      "summary": "Optimistic concurrency hash for safe edits",
+      "status": "implemented",
+      "locked": false,
+      "sections": [
+        {
+          "id": "hash_rules",
+          "heading": "Normalization",
+          "items": [
+            "16-char SHA-256 hex digest",
+            "Sorts keys, nodes & edges by ID",
+            "Excludes non-semantic created_by"
+          ]
+        }
+      ],
+      "code_refs": [
+        {
+          "path": "packages/shared/src/hash.ts",
+          "symbol": "computeViewHash"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "core_e1",
+      "source": "design_storage_cls",
+      "target": "zod_schemas",
+      "label": "validates",
+      "style": "solid",
+      "locked": true
+    },
+    {
+      "id": "core_e2",
+      "source": "design_storage_cls",
+      "target": "semantic_diff",
+      "label": "computes diff",
+      "style": "solid"
+    },
+    {
+      "id": "core_e3",
+      "source": "design_storage_cls",
+      "target": "lock_guards",
+      "label": "enforces locks",
+      "style": "solid"
+    },
+    {
+      "id": "core_e4",
+      "source": "design_storage_cls",
+      "target": "view_hash",
+      "label": "verifies base_hash",
+      "style": "solid"
+    }
+  ],
+  "created_by": "agent"
+}

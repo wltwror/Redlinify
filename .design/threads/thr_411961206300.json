@@ -1,0 +1,18 @@
+{
+  "id": "thr_411961206300",
+  "target_type": "node",
+  "view_id": "architecture",
+  "target_id": "web_server",
+  "entity_ref": "web_server",
+  "kind": "decision",
+  "status": "resolved",
+  "resolution_summary": "Use WebSockets on /ws to avoid HTTP/1.1 6-connection caps and avoid blocking Playwright networkidle checks.",
+  "messages": [
+    {
+      "id": "msg_9de07a9372b7",
+      "author": "agent",
+      "body": "Evaluated SSE vs WebSockets for live reload notifications.",
+      "created_at": "2026-11-24T19:37:19.744Z"
+    }
+  ]
+}

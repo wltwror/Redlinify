@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "project_name": "Redlinify",
+  "tabs": [
+    {
+      "view_id": "architecture",
+      "title": "System Architecture",
+      "order": 0
+    },
+    {
+      "view_id": "core_modules",
+      "title": "Shared Core Classes",
+      "order": 1
+    },
+    {
+      "view_id": "feedback_loop",
+      "title": "Agent Iteration Flow",
+      "order": 2
+    },
+    {
+      "view_id": "sandbox_coffee_shop",
+      "title": "Sandbox: Coffee Shop (Edit Me!)",
+      "order": 3
+    }
+  ],
+  "view_requests": []
+}

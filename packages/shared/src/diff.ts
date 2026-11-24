@@ -1,4 +1,4 @@
-import { canonicalEqual } from "./hash.js";
+import { canonicalEqual } from "./canonical.js";
 import type { BoxSection, DesignEdge, DesignNode, DesignView } from "./schemas.js";
 
 export interface SectionDiff {

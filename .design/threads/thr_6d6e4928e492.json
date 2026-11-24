@@ -1,0 +1,16 @@
+{
+  "id": "thr_6d6e4928e492",
+  "target_type": "node",
+  "view_id": "sandbox_coffee_shop",
+  "target_id": "espresso_bar",
+  "kind": "question",
+  "status": "open",
+  "messages": [
+    {
+      "id": "msg_f41da717d27d",
+      "author": "agent",
+      "body": "Welcome to the Coffee Shop Sandbox! Try double-clicking a title/item to edit inline, dragging boxes around, clicking '+ Add Box', dragging between handles to connect an edge, locking a box, or replying here—then open 'Pending Review' to inspect the live semantic diff!",
+      "created_at": "2026-11-24T19:37:19.761Z"
+    }
+  ]
+}

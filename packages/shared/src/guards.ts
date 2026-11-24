@@ -5,7 +5,7 @@ import {
   ValidationError,
   type LockViolation,
 } from "./errors.js";
-import { canonicalEqual } from "./hash.js";
+import { canonicalEqual } from "./canonical.js";
 import {
   DesignViewSchema,
   ViewPatchSchema,

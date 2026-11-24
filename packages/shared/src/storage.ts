@@ -138,22 +138,17 @@ export interface WorkspaceStatusResult {
   entity_refs: Record<string, string[]>;
 }
 
-export function isThreadWaitingOnAgent(thread: DesignThread): boolean {
-  if (thread.status !== "open") return false;
-  const lastMsg = thread.messages[thread.messages.length - 1];
-  return lastMsg?.author === "human";
-}
+import {
+  isThreadPendingForAgent,
+  isThreadWaitingOnAgent,
+  isThreadWaitingOnHuman,
+} from "./threadStatus.js";
 
-export function isThreadWaitingOnHuman(thread: DesignThread): boolean {
-  if (thread.status !== "open") return false;
-  const lastMsg = thread.messages[thread.messages.length - 1];
-  return lastMsg?.author === "agent";
-}
-
-export function isThreadPendingForAgent(thread: DesignThread): boolean {
-  if (thread.status !== "open") return false;
-  return isThreadWaitingOnAgent(thread) || thread.kind === "drift_alert";
-}
+export {
+  isThreadPendingForAgent,
+  isThreadWaitingOnAgent,
+  isThreadWaitingOnHuman,
+};
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -973,13 +968,17 @@ export class DesignStorage {
 
         if (input.resolve) {
           const summary = input.resolution_summary?.trim();
-          if (!summary) {
+          if (input.author === "agent" && !summary) {
             throw new ValidationError(
-              "resolution_summary is required when resolving a thread",
+              "resolution_summary is required when an agent resolves a thread",
             );
           }
           updated.status = "resolved";
-          updated.resolution_summary = summary;
+          if (summary) {
+            updated.resolution_summary = summary;
+          } else {
+            delete updated.resolution_summary;
+          }
         } else if (input.reopen) {
           updated.status = "open";
           delete updated.resolution_summary;
@@ -1021,13 +1020,15 @@ export class DesignStorage {
       let resolutionSummary: string | undefined;
       if (input.resolve) {
         const summary = input.resolution_summary?.trim();
-        if (!summary) {
+        if (input.author === "agent" && !summary) {
           throw new ValidationError(
-            "resolution_summary is required when resolving a thread",
+            "resolution_summary is required when an agent resolves a thread",
           );
         }
         status = "resolved";
-        resolutionSummary = summary;
+        if (summary) {
+          resolutionSummary = summary;
+        }
       }
 
       const threadId = `thr_${randomBytes(6).toString("hex")}`;

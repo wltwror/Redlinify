@@ -1,0 +1,17 @@
+{
+  "id": "thr_5a46b49ab89d",
+  "target_type": "node",
+  "view_id": "architecture",
+  "target_id": "browser_ui",
+  "entity_ref": "browser_ui",
+  "kind": "question",
+  "status": "open",
+  "messages": [
+    {
+      "id": "msg_016b9d2883ad",
+      "author": "agent",
+      "body": "Should we keep flat ELK-layered diagrams or add collapsible group containers in a future milestone?",
+      "created_at": "2026-11-24T19:37:19.750Z"
+    }
+  ]
+}

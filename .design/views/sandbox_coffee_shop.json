@@ -1,0 +1,159 @@
+{
+  "id": "sandbox_coffee_shop",
+  "title": "Sandbox: Coffee Shop (Edit Me!)",
+  "direction": "LR",
+  "nodes": [
+    {
+      "id": "order_kiosk",
+      "kind": "Station",
+      "title": "Order Kiosk",
+      "summary": "Standalone playground diagram—edit, add, delete, or lock freely!",
+      "status": "draft",
+      "locked": false,
+      "sections": [
+        {
+          "id": "menu_items",
+          "heading": "Menu Items",
+          "items": [
+            "Espresso (double)",
+            "Flat White",
+            "Matcha Latte",
+            "Cold Brew",
+            "Butter Croissant",
+            "Cardamom Bun"
+          ]
+        },
+        {
+          "id": "modifiers",
+          "heading": "Modifiers",
+          "items": [
+            "Oat / Whole milk",
+            "Extra shot",
+            "Iced"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ticket_queue",
+      "kind": "Queue",
+      "title": "Barista Ticket Queue",
+      "status": "draft",
+      "locked": false,
+      "sections": [
+        {
+          "id": "queue_rules",
+          "heading": "Dispatch Rules",
+          "items": [
+            "FIFO order tickets",
+            "Route espresso vs pastry",
+            "Flag allergy modifiers"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "espresso_bar",
+      "kind": "Station",
+      "title": "Espresso & Milk Bar",
+      "status": "needs_input",
+      "locked": false,
+      "sections": [
+        {
+          "id": "equipment",
+          "heading": "Equipment",
+          "items": [
+            "2-group espresso machine",
+            "Grinder #1 (House blend)",
+            "Grinder #2 (Decaf)"
+          ]
+        },
+        {
+          "id": "prep_steps",
+          "heading": "Prep Steps",
+          "items": [
+            "Pull 18g -> 36g shot",
+            "Steam milk to 60C"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pastry_warmer",
+      "kind": "Station",
+      "title": "Pastry Warmer",
+      "status": "draft",
+      "locked": false,
+      "sections": [
+        {
+          "id": "tasks",
+          "heading": "Tasks",
+          "items": [
+            "Warm croissant 20s",
+            "Bag takeaway pastry"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pickup_counter",
+      "kind": "Handoff",
+      "title": "Pickup Counter",
+      "status": "draft",
+      "locked": false,
+      "sections": [
+        {
+          "id": "handoff",
+          "heading": "Handoff",
+          "items": [
+            "Call customer name",
+            "Verify complete tray"
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "cs_e1",
+      "source": "order_kiosk",
+      "target": "ticket_queue",
+      "label": "submit order",
+      "step": 1,
+      "style": "solid"
+    },
+    {
+      "id": "cs_e2",
+      "source": "ticket_queue",
+      "target": "espresso_bar",
+      "label": "drink ticket",
+      "step": 2,
+      "style": "solid"
+    },
+    {
+      "id": "cs_e3",
+      "source": "ticket_queue",
+      "target": "pastry_warmer",
+      "label": "food ticket",
+      "step": 2,
+      "style": "dashed"
+    },
+    {
+      "id": "cs_e4",
+      "source": "espresso_bar",
+      "target": "pickup_counter",
+      "label": "serve beverage",
+      "step": 3,
+      "style": "solid"
+    },
+    {
+      "id": "cs_e5",
+      "source": "pastry_warmer",
+      "target": "pickup_counter",
+      "label": "serve pastry",
+      "step": 3,
+      "style": "dashed"
+    }
+  ],
+  "created_by": "agent"
+}
