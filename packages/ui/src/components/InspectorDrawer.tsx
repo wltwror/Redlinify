@@ -73,6 +73,7 @@ interface InspectorDrawerProps {
   onSaveEdge: (updated: DesignEdge) => Promise<void>;
   onDeleteEdge: (edgeId: string) => Promise<void>;
   onUpdateEdgeRoute: (edgeId: string, patch: Partial<EdgeRoute> | null) => void;
+  onFlipEdge: (edgeId: string) => void;
   onCreateThread: (input: {
     target_type: ThreadTargetType;
     view_id?: string;
@@ -494,6 +495,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
     onSaveEdge,
     onDeleteEdge,
     onUpdateEdgeRoute,
+    onFlipEdge,
     onCreateThread,
     onReplyThread,
     onOpenTab,
@@ -1756,15 +1758,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
                   <button
                     type="button"
                     disabled={Boolean(edgeDraft.locked)}
-                    onClick={() =>
-                      void commitEdge({
-                        ...edgeDraft,
-                        source: edgeDraft.target,
-                        target: edgeDraft.source,
-                        source_cardinality: edgeDraft.target_cardinality,
-                        target_cardinality: edgeDraft.source_cardinality,
-                      })
-                    }
+                    onClick={() => onFlipEdge(edgeDraft.id)}
                     className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-slate-700 disabled:opacity-40"
                   >
                     <ArrowLeftRight className="h-3 w-3" />

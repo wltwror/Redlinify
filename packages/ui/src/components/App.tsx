@@ -1327,6 +1327,60 @@ function WorkbenchInner() {
     ],
   );
 
+  const handleFlipEdge = useCallback(
+    async (edgeId: string) => {
+      const view = activeViewRef.current;
+      if (!view) return;
+      const existing = view.edges.find((e) => e.id === edgeId);
+      if (!existing) return;
+      if (existing.locked) {
+        showToast("Unlock edge before flipping direction.", "warning");
+        return;
+      }
+
+      pushHistoryEntry(view.id);
+
+      const prevRoute = edgeRoutesRef.current[edgeId];
+      if (prevRoute) {
+        const swappedRoute: EdgeRoute = {};
+        if (prevRoute.target_handle) {
+          swappedRoute.source_handle = prevRoute.target_handle;
+        }
+        if (prevRoute.source_handle) {
+          swappedRoute.target_handle = prevRoute.source_handle;
+        }
+        if (prevRoute.waypoints && prevRoute.waypoints.length > 0) {
+          swappedRoute.waypoints = [...prevRoute.waypoints].reverse();
+        }
+        if (Object.keys(swappedRoute).length > 0) {
+          edgeRoutesRef.current = {
+            ...edgeRoutesRef.current,
+            [edgeId]: swappedRoute,
+          };
+          setRoutingTick((t) => t + 1);
+          await persistCurrentLayout(view.id);
+        }
+      }
+
+      await persistView(
+        {
+          ...view,
+          edges: view.edges.map((e) =>
+            e.id === edgeId
+              ? {
+                  ...e,
+                  source: e.target,
+                  target: e.source,
+                }
+              : e,
+          ),
+        },
+        { recordHistory: false },
+      );
+    },
+    [persistCurrentLayout, persistView, pushHistoryEntry, showToast],
+  );
+
   const handleBeforeDelete = useCallback(
     async ({
       nodes: nodesToDel,
@@ -1698,20 +1752,7 @@ function WorkbenchInner() {
         dividerBefore: true,
         disabled: Boolean(edge.locked),
         onSelect: () => {
-          void persistView({
-            ...activeView,
-            edges: activeView.edges.map((e) =>
-              e.id === edge.id
-                ? {
-                    ...e,
-                    source: e.target,
-                    target: e.source,
-                    source_cardinality: e.target_cardinality,
-                    target_cardinality: e.source_cardinality,
-                  }
-                : e,
-            ),
-          });
+          void handleFlipEdge(edge.id);
         },
       },
       ...(isEr
@@ -1777,6 +1818,7 @@ function WorkbenchInner() {
     createBoxAtPosition,
     handleAutoLayout,
     handleCommitWaypoints,
+    handleFlipEdge,
     handleInlineAddField,
     handleInlineAddItem,
     handleOpenNodeThreads,
@@ -2220,6 +2262,7 @@ function WorkbenchInner() {
             });
           }}
           onUpdateEdgeRoute={handleUpdateEdgeRoute}
+          onFlipEdge={(edgeId) => void handleFlipEdge(edgeId)}
           onCreateThread={async (input) => {
             await createThread(input);
             await loadWorkspaceMeta();
