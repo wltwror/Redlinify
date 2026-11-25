@@ -121,10 +121,21 @@ describe("exportDiagram", () => {
   });
 
   it("exports valid Mermaid and zero-coordinate JSON", () => {
-    const mmdGen = renderViewToMermaid(generalView);
+    const mmdGen = renderViewToMermaid(generalView, { theme: "dark" });
+    expect(mmdGen).toContain("%%{init:");
     expect(mmdGen).toContain("flowchart LR");
-    expect(mmdGen).toContain('api["<b>API Gateway</b>');
-    expect(mmdGen).toContain('api -->|"1. queries"| db');
+    expect(mmdGen).toContain("%% Architecture & Export");
+    expect(mmdGen).toContain('api("<small>SERVICE · 🔒</small><br/><b>API Gateway</b><br/><i>Handles auth &amp; routing</i><br/><br/><b>Routes</b><br/>• GET /health")');
+    expect(mmdGen).toContain('db[("<small>STORE · NEEDS INPUT</small><br/><b>Postgres</b>")]');
+    expect(mmdGen).toContain('api ==>|"1 · queries"| db');
+    expect(mmdGen).toContain("classDef locked fill:#1e1b4b,stroke:#8b5cf6");
+    expect(mmdGen).toContain("class api locked");
+    expect(mmdGen).toContain("class db needs_input");
+    expect(mmdGen).toContain("linkStyle default stroke:#64748b");
+
+    const mmdLight = renderViewToMermaid(generalView, { theme: "light" });
+    expect(mmdLight).toContain("classDef locked fill:#f5f3ff,stroke:#7c3aed");
+    expect(mmdLight).toContain("classDef needs_input fill:#fef3c7,stroke:#d97706");
 
     const mmdEr = renderViewToMermaid(erView);
     expect(mmdEr).toContain("erDiagram");

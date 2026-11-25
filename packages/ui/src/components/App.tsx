@@ -2296,7 +2296,7 @@ function WorkbenchInner() {
         }
 
         if (format === "mermaid" || format === "copy_mermaid") {
-          const mmd = renderViewToMermaid(view);
+          const mmd = renderViewToMermaid(view, { theme });
           if (format === "copy_mermaid") {
             await navigator.clipboard.writeText(mmd);
             showToast("Copied Mermaid diagram to clipboard");
