@@ -13,6 +13,7 @@ import {
   stopUiServer,
   writeUiMeta,
 } from "./uiDaemon.js";
+import { resolveInstallRoot, runSelfUpdate } from "./updater.js";
 import { createWebServer } from "./web.js";
 
 function readPackageVersion(): string {
@@ -76,10 +77,11 @@ function printHelp(): void {
   process.stderr.write(`Redlinify CLI v${readPackageVersion()}
 
 Usage:
-  redlinify mcp  [--dir <path>] [--port 4173] [--open] [--no-ui]
-  redlinify ui   [--dir <path>] [--port 4173] [--host 127.0.0.1] [--open]
-  redlinify stop [--dir <path>] [--port 4173] [--host 127.0.0.1]
-  redlinify init [--dir <path>] [--name <project_name>]
+  redlinify mcp    [--dir <path>] [--port 4173] [--open] [--no-ui]
+  redlinify ui     [--dir <path>] [--port 4173] [--host 127.0.0.1] [--open]
+  redlinify stop   [--dir <path>] [--port 4173] [--host 127.0.0.1]
+  redlinify init   [--dir <path>] [--name <project_name>]
+  redlinify update [--check] [--rebuild] [--no-restart] [--dir <path>]
   redlinify --version | -v
   redlinify --help | -h
 `);
@@ -97,6 +99,68 @@ async function main(): Promise<void> {
   }
 
   const startDir = flags.dir ? path.resolve(flags.dir) : process.cwd();
+
+  if (command === "update") {
+    const cliEntryPath = fileURLToPath(import.meta.url);
+    const installRoot = resolveInstallRoot(cliEntryPath);
+    const projectRoot = await findProjectRoot(startDir);
+    const restartRoots = Array.from(
+      new Set([
+        ...(installRoot ? [installRoot] : []),
+        ...(existsSync(path.join(projectRoot, ".design")) ? [projectRoot] : []),
+      ]),
+    );
+    const checkOnly = flags.check === "true";
+    const result = await runSelfUpdate({
+      checkOnly,
+      rebuild: flags.rebuild === "true",
+      skipInstall: flags["skip-install"] === "true",
+      noRestart: flags["no-restart"] === "true",
+      remote: flags.remote,
+      branch: flags.branch,
+      restartRoots,
+      cliEntryPath,
+      onLog: (line) => process.stdout.write(`${line}\n`),
+    });
+
+    if (checkOnly) {
+      if (result.up_to_date) {
+        process.stdout.write(
+          `Already up to date (v${result.current_version} @ ${result.current_sha.slice(0, 7)} on ${result.branch}${result.ahead > 0 ? `, ${result.ahead} local commit(s) ahead` : ""}).\n`,
+        );
+      } else {
+        process.stdout.write(
+          `Update available on ${result.upstream}: ${result.behind} commit(s) behind (${result.previous_sha.slice(0, 7)} → latest${result.latest_tag ? ` / ${result.latest_tag}` : ""}).\n`,
+        );
+        for (const commit of result.commits) {
+          process.stdout.write(`  - ${commit}\n`);
+        }
+        process.stdout.write("Run 'redlinify update' to apply.\n");
+      }
+      return;
+    }
+
+    if (result.up_to_date && !result.updated) {
+      process.stdout.write(
+        `Redlinify is already up to date (v${result.current_version} @ ${result.current_sha.slice(0, 7)}). Pass --rebuild to force a rebuild.\n`,
+      );
+      return;
+    }
+
+    process.stdout.write(
+      `Updated Redlinify: v${result.previous_version} (${result.previous_sha.slice(0, 7)}) → v${result.current_version} (${result.current_sha.slice(0, 7)})\n`,
+    );
+    if (result.restarted_ui_urls.length > 0) {
+      process.stdout.write(
+        `Restarted active UI server(s): ${result.restarted_ui_urls.join(", ")}\n`,
+      );
+    }
+    process.stdout.write(
+      "Note: reconnect/restart any running stdio MCP client session to load the updated server.\n",
+    );
+    return;
+  }
+
   const rootDir =
     command === "init"
       ? startDir

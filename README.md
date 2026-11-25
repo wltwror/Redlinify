@@ -163,7 +163,7 @@ Resolved architectural threads move cleanly into the searchable **Decision Log**
 
 ## Zero-Friction Setup
 
-Requires **Node.js >= 22.0.0**.
+Requires **Node.js >= 22.12.0**.
 
 ```bash
 git clone https://github.com/wltwror/Redlinify.git
@@ -187,6 +187,11 @@ Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP clie
 * Built-in MCP instructions teach your agent how to draft views, pin questions, respect violet locks, and resolve decisions automatically.
 * On the first diagram write in any Git repo, Redlinify initializes `.design/` and spawns the detached loopback UI daemon (`127.0.0.1:4173`), returning `ui_url`.
 
+```bash
+redlinify update          # Pull latest changes, install deps if changed, rebuild & refresh active UI
+redlinify update --check  # Preview available updates without modifying your local setup
+```
+
 <details>
 <summary>Alternative MCP setup (without <code>npm link</code>) &amp; manual CLI commands</summary>
 
@@ -207,6 +212,8 @@ redlinify mcp --no-ui --dir /path/to/repo  # Headless MCP without auto-starting 
 redlinify ui --open --dir /path/to/repo    # Launch workbench UI standalone
 redlinify stop --dir /path/to/repo         # Stop the detached UI daemon
 redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
+redlinify update                           # Self-update clone, rebuild & restart active UI (or `npm run update`)
+redlinify update --check                   # Check if updates are available on origin
 ```
 
 </details>

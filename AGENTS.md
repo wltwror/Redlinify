@@ -8,7 +8,7 @@ This document captures architectural invariants, conventions, and verification c
 
 * `SPEC.md` — Authoritative project specification across all 5 milestones.
 * `packages/shared` (`@redlinify/shared`) — Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
-* `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
+* `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop|update`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
 * `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + `elkjs` + Tailwind CSS browser workbench.
 * `skill/SKILL.md` — Agent workflow skill instructions.
 

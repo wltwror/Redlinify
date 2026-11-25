@@ -34,7 +34,8 @@
     "build": "npm run build -w @redlinify/shared && npm run build -w @redlinify/server && npm run build -w @redlinify/ui",
     "typecheck": "npm run build -w @redlinify/shared && npm run typecheck -w @redlinify/server && npm run typecheck -w @redlinify/ui",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "update": "node packages/server/dist/cli.js update"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
