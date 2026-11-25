@@ -97,7 +97,7 @@ interface HistoryEntry {
 
 type ContextMenuState =
   | { kind: "pane"; x: number; y: number; flowPos: Point }
-  | { kind: "node"; x: number; y: number; nodeId: string; sectionId?: string }
+  | { kind: "node"; x: number; y: number; nodeId: string }
   | { kind: "edge"; x: number; y: number; edgeId: string; flowPos: Point };
 
 function getModifiedNodeIds(diff: SemanticDiff | null): Set<string> {
@@ -1578,11 +1578,6 @@ function WorkbenchInner() {
         onSelect: () => handleInlineAddItem(node.id, sec.id, "new_item"),
       });
 
-      const clickedSection =
-        !isEr && contextMenu.sectionId
-          ? node.sections.find((s) => s.id === contextMenu.sectionId)
-          : undefined;
-
       const addEntryMenuItems: ContextMenuItem[] = (() => {
         if (isEr) {
           return [
@@ -1633,26 +1628,6 @@ function WorkbenchInner() {
               disabled: node.locked,
               onSelect: () =>
                 handleInlineAddItem(node.id, node.sections[0]!.id, "new_item"),
-            },
-          ];
-        }
-        if (clickedSection) {
-          const otherSections = node.sections.filter(
-            (s) => s.id !== clickedSection.id,
-          );
-          return [
-            {
-              id: "add_entry",
-              label: `Add Entry to ${clickedSection.heading}`,
-              disabled: node.locked,
-              onSelect: () =>
-                handleInlineAddItem(node.id, clickedSection.id, "new_item"),
-            },
-            {
-              id: "add_entry_other",
-              label: "Add Entry to Other Section",
-              disabled: node.locked,
-              children: otherSections.map(makeAddEntryItem),
             },
           ];
         }
@@ -2018,15 +1993,11 @@ function WorkbenchInner() {
     (e: ReactMouseEvent, node: StructuredFlowNode) => {
       e.preventDefault();
       selectSingleNode(node.id);
-      const sectionEl = (e.target as HTMLElement | null)?.closest<HTMLElement>(
-        "[data-section-id]",
-      );
       setContextMenu({
         kind: "node",
         x: e.clientX,
         y: e.clientY,
         nodeId: node.id,
-        sectionId: sectionEl?.dataset.sectionId,
       });
     },
     [selectSingleNode],

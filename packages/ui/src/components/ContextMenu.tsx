@@ -56,7 +56,7 @@ export function ContextMenu({
     y,
     Math.max(8, window.innerHeight - Math.min(360, items.length * 34 + 40)),
   );
-  const flipSubmenuLeft = clampedLeft + 430 > window.innerWidth;
+  const flipSubmenuLeft = clampedLeft + 480 > window.innerWidth;
 
   return (
     <div
