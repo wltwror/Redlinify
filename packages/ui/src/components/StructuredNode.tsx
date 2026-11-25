@@ -501,7 +501,11 @@ function StructuredNodeComponent({
             );
 
             return (
-              <div key={section.id} className="px-3 py-2">
+              <div
+                key={section.id}
+                data-section-id={section.id}
+                className="px-3 py-2"
+              >
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                     {section.heading}

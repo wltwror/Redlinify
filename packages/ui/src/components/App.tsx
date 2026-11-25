@@ -97,7 +97,7 @@ interface HistoryEntry {
 
 type ContextMenuState =
   | { kind: "pane"; x: number; y: number; flowPos: Point }
-  | { kind: "node"; x: number; y: number; nodeId: string }
+  | { kind: "node"; x: number; y: number; nodeId: string; sectionId?: string }
   | { kind: "edge"; x: number; y: number; edgeId: string; flowPos: Point };
 
 function getModifiedNodeIds(diff: SemanticDiff | null): Set<string> {
@@ -1570,40 +1570,104 @@ function WorkbenchInner() {
     if (contextMenu.kind === "node") {
       const node = activeView.nodes.find((n) => n.id === contextMenu.nodeId);
       if (!node) return null;
-      const items: ContextMenuItem[] = [
-        {
-          id: "add_entry",
-          label: isEr
-            ? "Add Attribute"
-            : `Add Entry to ${node.sections[0]?.heading ?? "Details"}`,
-          disabled: node.locked,
-          onSelect: () => {
-            if (isEr) {
-              const name = `col_${(node.fields?.length ?? 0) + 1}`;
-              handleInlineAddField(node.id, name);
-            } else if (node.sections.length > 0) {
-              handleInlineAddItem(node.id, node.sections[0]!.id, "new_item");
-            } else {
-              void persistView({
-                ...activeView,
-                nodes: activeView.nodes.map((n) =>
-                  n.id === node.id
-                    ? {
-                        ...n,
-                        sections: [
-                          {
-                            id: `sec_${Date.now().toString(36)}`,
-                            heading: "Details",
-                            items: ["new_item"],
-                          },
-                        ],
-                      }
-                    : n,
-                ),
-              });
-            }
+
+      const makeAddEntryItem = (sec: { id: string; heading: string }): ContextMenuItem => ({
+        id: `add_entry_${sec.id}`,
+        label: sec.heading,
+        disabled: node.locked,
+        onSelect: () => handleInlineAddItem(node.id, sec.id, "new_item"),
+      });
+
+      const clickedSection =
+        !isEr && contextMenu.sectionId
+          ? node.sections.find((s) => s.id === contextMenu.sectionId)
+          : undefined;
+
+      const addEntryMenuItems: ContextMenuItem[] = (() => {
+        if (isEr) {
+          return [
+            {
+              id: "add_entry",
+              label: "Add Attribute",
+              disabled: node.locked,
+              onSelect: () => {
+                const name = `col_${(node.fields?.length ?? 0) + 1}`;
+                handleInlineAddField(node.id, name);
+              },
+            },
+          ];
+        }
+        if (node.sections.length === 0) {
+          return [
+            {
+              id: "add_entry",
+              label: "Add Entry to Details",
+              disabled: node.locked,
+              onSelect: () => {
+                void persistView({
+                  ...activeView,
+                  nodes: activeView.nodes.map((n) =>
+                    n.id === node.id
+                      ? {
+                          ...n,
+                          sections: [
+                            {
+                              id: `sec_${Date.now().toString(36)}`,
+                              heading: "Details",
+                              items: ["new_item"],
+                            },
+                          ],
+                        }
+                      : n,
+                  ),
+                });
+              },
+            },
+          ];
+        }
+        if (node.sections.length === 1) {
+          return [
+            {
+              id: "add_entry",
+              label: `Add Entry to ${node.sections[0]!.heading}`,
+              disabled: node.locked,
+              onSelect: () =>
+                handleInlineAddItem(node.id, node.sections[0]!.id, "new_item"),
+            },
+          ];
+        }
+        if (clickedSection) {
+          const otherSections = node.sections.filter(
+            (s) => s.id !== clickedSection.id,
+          );
+          return [
+            {
+              id: "add_entry",
+              label: `Add Entry to ${clickedSection.heading}`,
+              disabled: node.locked,
+              onSelect: () =>
+                handleInlineAddItem(node.id, clickedSection.id, "new_item"),
+            },
+            {
+              id: "add_entry_other",
+              label: "Add Entry to Other Section",
+              disabled: node.locked,
+              children: otherSections.map(makeAddEntryItem),
+            },
+          ];
+        }
+        return [
+          {
+            id: "add_entry",
+            label: "Add Entry to…",
+            disabled: node.locked,
+            children: node.sections.map(makeAddEntryItem),
           },
-        },
+        ];
+      })();
+
+      const items: ContextMenuItem[] = [
+        ...addEntryMenuItems,
         ...(isEr
           ? []
           : [
@@ -1954,11 +2018,15 @@ function WorkbenchInner() {
     (e: ReactMouseEvent, node: StructuredFlowNode) => {
       e.preventDefault();
       selectSingleNode(node.id);
+      const sectionEl = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+        "[data-section-id]",
+      );
       setContextMenu({
         kind: "node",
         x: e.clientX,
         y: e.clientY,
         nodeId: node.id,
+        sectionId: sectionEl?.dataset.sectionId,
       });
     },
     [selectSingleNode],
