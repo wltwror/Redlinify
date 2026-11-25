@@ -32,7 +32,7 @@ export class LockViolationError extends DesignError {
     super(
       "LOCK_VIOLATION",
       message ??
-        `Cannot mutate locked design elements: ${summary}. Open a 'question' thread via post_thread_message instead.`,
+        `Cannot mutate locked design elements: ${summary}. Open a 'question' thread via post_thread instead.`,
       { violations },
     );
     this.violations = violations;
@@ -53,7 +53,7 @@ export class ConcurrencyConflictError extends DesignError {
     super(
       "CONCURRENCY_CONFLICT",
       message ??
-        `View '${view_id}' changed on disk (expected base_hash=${expected_hash ?? "<missing>"}, actual=${actual_hash}). Call get_pending_feedback or get_view before retrying.`,
+        `View '${view_id}' changed on disk (expected base_hash=${expected_hash ?? "<missing>"}, actual=${actual_hash}). Call get_workspace or get_view before retrying.`,
       { view_id, expected_hash, actual_hash },
     );
     this.view_id = view_id;

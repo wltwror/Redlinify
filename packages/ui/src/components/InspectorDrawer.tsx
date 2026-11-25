@@ -663,7 +663,7 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
 
   const buildAgentPrompt = () => {
     const lines = [
-      "Please review my latest Redlinify feedback by calling `get_pending_feedback()`:",
+      "Please review my latest Redlinify feedback by calling `get_workspace()`:",
     ];
     for (const vd of pendingFeedback.view_diffs) {
       const d = vd.diff;

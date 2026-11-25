@@ -15,7 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
   <a href="#zero-friction-setup"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg" alt="Node >= 22" /></a>
   <a href="#development--architecture"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="Strict TypeScript" /></a>
-  <a href="#mcp-tool-reference-10-tools"><img src="https://img.shields.io/badge/MCP-10%20tools-8b5cf6.svg" alt="MCP 10 Tools" /></a>
+  <a href="#mcp-tool-reference-6-tools"><img src="https://img.shields.io/badge/MCP-6%20tools-8b5cf6.svg" alt="MCP 6 Tools" /></a>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
   <a href="#why-redlinify">Features</a> ·
   <a href="#visual-tour">Screenshots</a> ·
   <a href="#zero-friction-setup">Setup</a> ·
-  <a href="#mcp-tool-reference-10-tools">MCP Tools</a>
+  <a href="#mcp-tool-reference-6-tools">MCP Tools</a>
 </p>
 
 <p align="center">
@@ -60,10 +60,10 @@ Redlinify runs a closed, Git-native collaboration loop between your coding agent
 
 | Stage | Where | What Happens |
 | :--- | :--- | :--- |
-| **01 · Agent Drafts & Asks** | `MCP stdio` | Agent calls `upsert_view()` / `patch_view()`, auto-starts `127.0.0.1:4173`, and pins **amber** questions for your input. |
+| **01 · Agent Drafts & Asks** | `MCP stdio` | Agent calls `save_view()`, auto-starts `127.0.0.1:4173`, and pins **amber** questions for your input. |
 | **02 · Comment & Model** | `Browser UI` | Over live WebSockets, you read & reply to agent threads, right-click to add nodes or ER fields, connect edges, and drag bends. |
 | **03 · Lock & Decide** | `Violet Guard` | Lock approved cards and contracts in **violet** so the agent cannot overwrite them; resolved threads graduate to **Decisions**. |
-| **04 · Semantic Diff & Code** | `Zero Bloat` | `get_pending_feedback()` returns only structural changes (`+node`, `~field`, replies), and `sync_code_refs()` links built files back to nodes. |
+| **04 · Semantic Diff & Code** | `Zero Bloat` | `get_workspace()` returns only structural changes (`+node`, `~field`, replies), and `sync_code_refs()` links built files back to nodes. |
 
 ---
 
@@ -198,20 +198,16 @@ redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 
 ---
 
-## MCP Tool Reference (10 Tools)
+## MCP Tool Reference (6 Tools)
 
-| Tool | Purpose |
-| :--- | :--- |
-| `get_workspace_status` | List all tabs (`view_hash`, triage/drifted counts, human edit flags), `entity_ref` slugs, `view_requests`, and active `ui_url`. |
-| `open_workbench` | Ensure the detached loopback workbench UI is running and return (or open) a direct deep link to any tab. |
-| `get_view` | Read a semantic `DesignView` (zero coordinates), its `view_hash`, open threads, and optional 1-line Decision summaries. |
-| `get_pending_feedback` | Pull semantic diffs since agent checkpoints, `view_hashes`, pending `view_requests`, and open threads awaiting agent response. |
-| `upsert_view` | Create or replace a semantic `DesignView` with `base_hash` concurrency and lock protection; auto-starts the UI. |
-| `patch_view` | Apply targeted edits (`meta`, add/update/remove nodes or edges, `section_ops`) with `base_hash` and lock guards. |
-| `acknowledge_feedback` | Advance agent checkpoints once human edits are reviewed and accepted. |
-| `post_thread_message` | Open an anchored thread (`question`, `change_request`, `decision`, `drift_alert`), reply, or resolve with a 1-line ADR summary. |
-| `get_node_history` | Query full transcripts of resolved Decision threads by `target_id`, `entity_ref`, `view_id`, or text search. |
-| `sync_code_refs` | Link source `code_refs` (`path:symbol`) and update `implemented` / `drifted` status without clobbering unrelated edits. |
+| Tool | Role | Purpose |
+| :--- | :--- | :--- |
+| `get_workspace` | `Read` | Return tabs (`view_hash`, triage/drifted counts), `entity_ref` slugs, `view_requests`, pending semantic diffs, open threads, and `ui_url` (or launch browser with `open_browser: true`). |
+| `get_view` | `Read` | Read a semantic `DesignView` (zero coordinates), its `view_hash`, open threads, and optional 1-line Decision summaries. |
+| `get_decisions` | `Read` | Query resolved Decision (ADR) transcripts—or `open`/`all` threads—by `view_id`, `target_id`, `entity_ref`, or text `query`. |
+| `save_view` | `Write` | Create/replace (`mode="replace"`), incrementally upsert/remove nodes & edges (`mode="patch"`), or accept human edits (`mode="acknowledge"`) with `base_hash` concurrency, violet lock guards, and auto-UI launch. |
+| `post_thread` | `Write` | Open an anchored thread (`question`, `change_request`, `decision`, `drift_alert`), reply, reopen, or resolve with a 1-line ADR `resolution_summary`. |
+| `sync_code_refs` | `Write` | Link source `code_refs` (`path:symbol`) and update `implemented` / `drifted` status on nodes (including locked ones) without clobbering unrelated edits. |
 
 ---
 

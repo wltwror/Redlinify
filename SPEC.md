@@ -136,7 +136,7 @@ export interface DesignNode {
   title: string;
   summary?: string;
   status: NodeStatus;
-  locked: boolean;          // if true, agent CANNOT mutate/delete/unlock via upsert_view or patch_view
+  locked: boolean;          // if true, agent CANNOT mutate/delete/unlock via save_view
   sections: BoxSection[];
   code_refs?: Array<{
     path: string;           // repo-relative path, e.g. "src/dedup/engine.py"
@@ -192,21 +192,18 @@ export interface ViewLayout {
 
 ---
 
-## 5. MCP Tool Surface (9 Semantic Tools)
+## 5. MCP Tool Surface (6 Lean Orthogonal Tools)
 
-Expose coarse, high-signal tools on `redlinify mcp` (never granular pixel-drawing tools):
+Expose coarse, high-signal tools with lean wire schemas and `readOnlyHint` annotations on `redlinify mcp` (strict slug/schema validation runs inside handlers; write calls return compact non-echoing metadata):
 
 | Tool | Inputs | Behavior & Return Value |
 | --- | --- | --- |
-| `get_workspace_status` | `{}` | Returns all tabs (with `view_hash`, thread counts waiting on `agent` vs. `human`, `drifted_count`, `has_human_edits`, `diff_counts`), workspace-level thread counts, pending `view_requests`, and the existing `entity_refs` registry (`entity_ref -> view_id[]`) so agents reuse exact slugs. |
+| `get_workspace` | `{ view_id?, include_diff?: boolean, open_browser?: boolean }` | **Read hub & iteration tool.** Returns tabs (with `view_hash`, thread counts, `drifted_count`, `has_human_edits`, `diff_counts`), `view_requests`, `entity_refs` registry, and (by default) `view_diffs`, `view_hashes`, and `pending_threads` awaiting agent response. Pass `open_browser: true` to ensure/open the UI and return `ui_url`. |
 | `get_view` | `{ view_id, include_resolved_summaries?: boolean }` | Returns `{ view, view_hash, open_threads }` for that view. Optionally includes 1-line `resolution_summary` metadata for resolved threads (keeps tokens low). |
-| `get_pending_feedback` | `{ view_id?: string }` | **Core iteration tool.** Computes semantic diffs between current `views/*.json` and checkpoint baselines (returning diffs + `view_hash`), returns all pending `view_requests`, and returns all `open` threads where the last message is from `human` (or any unresolved `drift_alert`). |
-| `upsert_view` | `{ view: DesignView, base_hash?: string, fulfill_request_id?: string, force?: boolean }` | Validates schema and edge referential integrity. **Optimistic Concurrency:** if the view already exists on disk, requires `base_hash` matching current disk `view_hash` (unless `force: true`), rejecting stale writes with `CONCURRENCY_CONFLICT`. **Code Ref Preservation:** preserves existing `node.code_refs` when omitted by incoming view. **Lock guard:** rejects deleting, unlocking (`locked: true -> false`), or altering semantic fields of any locked node or locked edge, instructing the agent to open a `question` thread instead. On success: writes `views/{id}.json`, updates `workspace.json` (clearing `fulfill_request_id`), and updates `.checkpoint/{id}.json`. |
-| `patch_view` | `{ view_id, base_hash, patch: ViewPatch }` | Incremental token-efficient alternative to `upsert_view` supporting `meta`, `add_nodes`, `update_nodes` (with section replacement or `section_ops`), `remove_nodes` (cascading unlocked incident edges, rejecting locked incident edges), `add_edges`, `update_edges`, `remove_edges`. Enforces `base_hash` and lock guards, then updates view and `.checkpoint/{view_id}.json`. |
-| `acknowledge_feedback` | `{ views: Array<{ view_id, base_hash }> }` | Advances `.checkpoint/{view_id}.json` to match current disk views when the agent accepts human edits as-is without modifying the diagram. Verifies every `base_hash` atomically before updating any checkpoint. |
-| `post_thread_message` | `{ thread_id?, target_type?, view_id?, target_id?, entity_ref?, kind?, body, resolve?: boolean, reopen?: boolean, resolution_summary?: string }` | Creates a new thread file `.design/threads/{id}.json` or appends an `agent` reply. For `target_type: "node"`, auto-populates `entity_ref` from the target node when omitted. Setting `resolve: true` requires a non-empty `resolution_summary` so it is archived as an ADR. |
-| `get_node_history` | `{ target_id?, entity_ref? }` | Returns full message transcripts of all **resolved** threads matching `target_id` or `entity_ref` so the agent can recall past tradeoffs and rejected alternatives on demand. |
-| `sync_code_refs` | `{ view_id, updates: Array<{ node_id, status: "implemented" \| "drifted", code_refs }> }` | Updates implementation links and statuses on matching nodes—explicitly **allowed on `locked: true` nodes**—without touching other node fields. Patches **only** `status` and `code_refs` on those nodes inside `.checkpoint/{view_id}.json` so unrelated pending human edits remain visible in `get_pending_feedback`. |
+| `get_decisions` | `{ view_id?, target_id?, entity_ref?, query?, status?: "resolved" \| "open" \| "all" }` | Returns matching thread transcripts (default `status: "resolved"`) so the agent can recall ADRs, past tradeoffs, and rejected alternatives on demand. |
+| `save_view` | `{ view_id?, mode?: "replace" \| "patch" \| "acknowledge", base_hash?, title?, diagram_type?, direction?, nodes?, edges?, remove_nodes?, remove_edges?, fulfill_request_id?, force?, acknowledge_views? }` | Unified write endpoint (`mode="replace"` creates/replaces a full view; `mode="patch"` upserts nodes/edges by `id` with `section_ops`/nullable clears and `remove_*`; `mode="acknowledge"` advances checkpoints). Enforces `base_hash` optimistic concurrency, code ref preservation, and violet lock guards; auto-starts the local UI and returns `{ mode, view_id, view_hash, ui_url, ... }`. |
+| `post_thread` | `{ thread_id?, target_type?, view_id?, target_id?, entity_ref?, kind?, body, resolve?: boolean, reopen?: boolean, resolution_summary?: string }` | Creates a new thread file `.design/threads/{id}.json` or appends an `agent` reply. For `target_type: "node"`, auto-populates `entity_ref` from the target node when omitted. Setting `resolve: true` requires a non-empty `resolution_summary` so it is archived as an ADR. |
+| `sync_code_refs` | `{ view_id, updates: Array<{ node_id, status: "implemented" \| "drifted", code_refs }> }` | Updates implementation links and statuses on matching nodes—explicitly **allowed on `locked: true` nodes**—without touching other node fields. Patches **only** `status` and `code_refs` on those nodes inside `.checkpoint/{view_id}.json` so unrelated pending human edits remain visible in `get_workspace`. |
 
 ---
 
@@ -283,17 +280,17 @@ Build a clean, dark-mode-friendly developer workbench hosted at **`http://127.0.
 ## 8. Agent Workflow Skill (`skill/SKILL.md`)
 
 Ship a ready-to-install `SKILL.md` defining the agent's behavioral contract:
-* **Initial Design:** Call `get_workspace_status()` first to inspect existing tabs and `entity_refs`. Generate 2–4 focused views (`Classes`, `Algorithm`, `Integrations`, `Dataflow`) via `upsert_view`, keeping boxes concise and `entity_ref` slugs consistent.
-* **Ask in the Diagram, Not in Chat:** Pin `question` threads via `post_thread_message` with node status `needs_input` whenever an architectural ambiguity exists.
-* **Iterating on Feedback:** Always start with `get_pending_feedback()`. Use `patch_view` for targeted updates, `upsert_view` with `base_hash` for full rewrites, and `acknowledge_feedback` when accepting human edits without modifying a diagram. Never mutate or unlock `locked: true` nodes/edges. Resolve settled threads with a crisp 1-line `resolution_summary`.
-* **Implementation & Living Docs:** Before coding, call `get_view` and `get_node_history` on relevant `entity_ref`s. Afterward, call `sync_code_refs` to attach `code_refs` and transition `approved -> implemented | drifted` (posting a `drift_alert` thread if reality forced a deviation).
+* **Initial Design:** Call `get_workspace()` first to inspect existing tabs and `entity_refs`. Generate 2–4 focused views (`Classes`, `Algorithm`, `Integrations`, `Dataflow`) via `save_view`, keeping boxes concise and `entity_ref` slugs consistent.
+* **Ask in the Diagram, Not in Chat:** Pin `question` threads via `post_thread` with node status `needs_input` whenever an architectural ambiguity exists.
+* **Iterating on Feedback:** Always start with `get_workspace()`. Use `save_view({ mode: "patch", base_hash, ... })` for targeted updates, `save_view({ mode: "replace", base_hash, ... })` for full rewrites, and `save_view({ mode: "acknowledge", ... })` when accepting human edits without modifying a diagram. Never mutate or unlock `locked: true` nodes/edges. Resolve settled threads with a crisp 1-line `resolution_summary`.
+* **Implementation & Living Docs:** Before coding, call `get_view` and `get_decisions` on relevant `entity_ref`s. Afterward, call `sync_code_refs` to attach `code_refs` and transition `approved -> implemented | drifted` (posting a `drift_alert` thread if reality forced a deviation).
 
 ---
 
 ## 9. Phased Implementation Plan
 
 1. **Milestone 1 — Core Schema, Storage & Diff Engine (`packages/shared`):** Implement Zod v3 schemas, canonical hashing, lock/patch guards, cross-process locking + atomic `.design/` file I/O, missing-checkpoint Git fallback, and `computeSemanticDiff` with comprehensive unit & integration tests.
-2. **Milestone 2 — CLI & MCP Server (`packages/server`):** Implement `redlinify init` and `redlinify mcp` over stdio with all 9 MCP tools and end-to-end tests against `.design/`.
+2. **Milestone 2 — CLI & MCP Server (`packages/server`):** Implement `redlinify init` and `redlinify mcp` over stdio with all 6 lean MCP tools and end-to-end tests against `.design/`.
 3. **Milestone 3 — Local Web Server & Read-Only Multi-Tab Canvas (`packages/server` + `packages/ui`):** Build `redlinify ui` (`127.0.0.1:4173` REST + WebSocket + `chokidar` self-echo suppression), `TabBar`, `StructuredNode`, `StepEdge`, and `elkjs` auto-layout (`TB`/`LR`) with `.layout/` persistence.
 4. **Milestone 4 — Interactive Editing, Threads & Cross-Tab Links:** Implement inline editing, `+ Add Box`, edge creation, `InspectorDrawer` (Spec / Threads / Links & Code), `+ Request View` stubs, and WebSocket live reload without losing viewport state.
 5. **Milestone 5 — Triage UX & Skill Packaging:** Add tab triage badges, canvas diff highlights, triage filter bar, Pending Review / Copy Prompt bridge, Open Questions queue, and finalize `skill/SKILL.md` + `README.md`.

@@ -115,7 +115,7 @@
   <text x="317" y="93.5" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="600" fill="#0369a1">MCP stdio</text>
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" fill="#334155">
     <circle cx="54" cy="130" r="3" fill="#0284c7" />
-    <text x="66" y="134" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#0f172a">upsert_view() / patch_view()</text>
+    <text x="66" y="134" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#0f172a">save_view() · mode: replace|patch</text>
     <circle cx="54" cy="156" r="3" fill="#0284c7" />
     <text x="66" y="160">Auto-starts <tspan font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#0369a1">127.0.0.1:4173</tspan> workbench</text>
     <circle cx="54" cy="182" r="3" fill="#d97706" />
@@ -172,7 +172,7 @@
   <text x="315" y="317.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#9f1239">Zero Bloat</text>
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" fill="#334155">
     <circle cx="54" cy="354" r="3" fill="#e11d48" />
-    <text x="66" y="358"><tspan font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.8" fill="#be123c">get_pending_feedback()</tspan> → delta only</text>
+    <text x="66" y="358"><tspan font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.8" fill="#be123c">get_workspace()</tspan> → delta only</text>
     <circle cx="54" cy="380" r="3" fill="#059669" />
     <text x="66" y="384">Builds code &amp; schema from clean graph</text>
     <circle cx="54" cy="406" r="3" fill="#0284c7" />

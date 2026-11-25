@@ -8,7 +8,7 @@ This document captures architectural invariants, conventions, and verification c
 
 * `SPEC.md` — Authoritative project specification across all 5 milestones.
 * `packages/shared` (`@redlinify/shared`) — Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
-* `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop`), stdio MCP server (10 tools with built-in workflow `instructions` + detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
+* `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
 * `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + `elkjs` + Tailwind CSS browser workbench.
 * `skill/SKILL.md` — Agent workflow skill instructions.
 
@@ -30,8 +30,8 @@ This document captures architectural invariants, conventions, and verification c
    * Threads are stored one file per thread (`.design/threads/{thread_id}.json`), never in one monolithic `threads.json`.
    * All IDs used in file paths (`view.id`, `thread.id`, etc.) are validated against `ID_SLUG_REGEX` to prevent path traversal.
 5. **Optimistic Concurrency, Lock Guards & `syncCodeRefs` Checkpoint Patching**:
-   * `upsert_view` (when updating existing views without `force`), `patch_view`, `acknowledge_feedback`, and UI `PUT /api/views/:id` require matching `base_hash` (`computeViewHash(view)`).
-   * Agents cannot modify, delete, or unlock (`locked: true -> false`) locked nodes or locked edges via `upsert_view` or `patch_view`.
+   * `save_view` (`replace` updating existing views without `force`, `patch`, `acknowledge`) and UI `PUT /api/views/:id` require matching `base_hash` (`computeViewHash(view)`).
+   * Agents cannot modify, delete, or unlock (`locked: true -> false`) locked nodes or locked edges via `save_view`.
    * `sync_code_refs` IS explicitly permitted to update `status` (`implemented | drifted`) and `code_refs` on `locked: true` nodes, and MUST patch **only** `status` and `code_refs` on those nodes inside `.design/.checkpoint/{view_id}.json` so unrelated pending human edits are never swallowed.
 6. **Missing-Checkpoint Baseline Resolution**:
    * When `.design/.checkpoint/{id}.json` does not exist: if `view.created_by === "human"`, treat baseline as `null`; otherwise fall back to `git show HEAD:.design/views/{id}.json`; if unavailable, seed checkpoint from current view.

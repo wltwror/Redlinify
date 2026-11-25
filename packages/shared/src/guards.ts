@@ -140,7 +140,7 @@ export function checkLockViolations(
 }
 
 /**
- * Preserves existing `code_refs` when an agent calls `upsert_view` without
+ * Preserves existing `code_refs` when an agent calls `save_view` without
  * re-sending `code_refs` on nodes that already have implementation links.
  */
 export function mergePreservedCodeRefs(
