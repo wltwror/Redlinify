@@ -174,6 +174,10 @@ export function deleteView(
   });
 }
 
+export function fetchAllViews(): Promise<{ views: DesignView[] }> {
+  return requestJson<{ views: DesignView[] }>("/api/views");
+}
+
 export function fetchView(viewId: string): Promise<ViewDetailResponse> {
   return requestJson<ViewDetailResponse>(
     `/api/views/${encodeURIComponent(viewId)}`,

@@ -21,6 +21,7 @@ import {
   WorkspaceTabSchema,
   computeSemanticDiff,
   idSlugSchema,
+  type DesignView,
 } from "@redlinify/shared";
 
 export interface WebServerOptions {
@@ -321,6 +322,33 @@ export async function createWebServer(
           markSelfWrite("workspace.json");
           await storage.deleteViewRequest(reqId);
           sendJson(res, 200, { deleted: true, id: reqId });
+          return;
+        }
+
+        if (method === "GET" && pathname === "/api/views") {
+          const status = await storage.getWorkspaceStatus();
+          const allIds = status.initialized ? await storage.listViewIds() : [];
+          const tabOrder = new Map(
+            status.tabs.map((tab, idx) => [tab.view_id, idx]),
+          );
+          const orderedIds = [...allIds].sort((a, b) => {
+            const oa = tabOrder.get(a);
+            const ob = tabOrder.get(b);
+            if (oa !== undefined && ob !== undefined) return oa - ob;
+            if (oa !== undefined) return -1;
+            if (ob !== undefined) return 1;
+            return a.localeCompare(b);
+          });
+          const views: DesignView[] = [];
+          for (const id of orderedIds) {
+            try {
+              const { view } = await storage.readView(id);
+              views.push(view);
+            } catch {
+              // Skip unreadable or concurrently deleted view cleanly
+            }
+          }
+          sendJson(res, 200, { views });
           return;
         }
 

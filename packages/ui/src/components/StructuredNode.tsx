@@ -196,10 +196,7 @@ function StructuredNodeComponent({
     if (!editingField) return;
     const { fieldId, draft } = editingField;
     setEditingField(null);
-    const trimmed = draft.trim();
-    if (trimmed) {
-      onInlineUpdateFieldName(node.id, fieldId, trimmed);
-    }
+    onInlineUpdateFieldName(node.id, fieldId, draft.trim());
   };
 
   const commitNewField = () => {
@@ -411,6 +408,11 @@ function StructuredNodeComponent({
                               draft: field.name,
                             });
                           }}
+                          title={
+                            node.locked
+                              ? "Locked entity"
+                              : "Double-click to edit (clear to delete)"
+                          }
                           className="truncate font-mono text-slate-100"
                         >
                           {field.name}
@@ -578,7 +580,7 @@ function StructuredNodeComponent({
                               title={
                                 node.locked
                                   ? "Locked node"
-                                  : "Double-click to edit line"
+                                  : "Double-click to edit (clear to delete)"
                               }
                               className="truncate rounded px-1 py-0.5 font-mono text-[11px] text-slate-200 hover:bg-slate-800/70"
                             >

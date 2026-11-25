@@ -9,6 +9,7 @@ import {
   Moon,
   MoreVertical,
   Plus,
+  Search,
   Sun,
   Trash2,
   X,
@@ -36,6 +37,7 @@ interface TabBarProps {
     direction: ViewDirection;
   }) => Promise<void>;
   onDeleteView: (viewId: string) => Promise<void>;
+  onOpenSearch: () => void;
   theme: "dark" | "light";
   onToggleTheme: () => void;
   bgPattern: "dots" | "grid";
@@ -53,6 +55,7 @@ export function TabBar({
   onRequestView,
   onCreateBlankView,
   onDeleteView,
+  onOpenSearch,
   theme,
   onToggleTheme,
   bgPattern,
@@ -282,6 +285,20 @@ export function TabBar({
         <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
           <button
             type="button"
+            onClick={onOpenSearch}
+            title="Quick search & jump (Ctrl+K or /)"
+            aria-label="Search workspace"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/80 px-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
+          >
+            <Search className="h-3.5 w-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Search</span>
+            <kbd className="hidden md:inline rounded border border-slate-700 bg-slate-900 px-1 py-0.2 font-mono text-[10px] text-slate-400">
+              Ctrl K
+            </kbd>
+          </button>
+
+          <button
+            type="button"
             onClick={onToggleBgPattern}
             title={
               bgPattern === "dots"
@@ -343,7 +360,12 @@ export function TabBar({
       )}
 
       {confirmDeleteTab && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete Tab Permanently"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md rounded-xl border border-rose-500/40 bg-slate-900 p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="flex items-center gap-2 text-rose-300">
@@ -414,7 +436,12 @@ export function TabBar({
       )}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add Design View"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-slate-100">

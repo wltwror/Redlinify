@@ -253,7 +253,9 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | Multi-select boxes | `Ctrl+Click` / `Cmd+Click` (or `Shift+Drag` marquee) |
 | Connect two nodes | Drag from any 4-sided handle to another node |
 | Bend or split an edge | Select a line and drag its midpoint or segment split handles |
-| Inline edit title / entry / attribute | Double-click text inside an unlocked card |
+| Inline edit title / entry / attribute | Double-click text inside an unlocked card (clear text + `Enter` deletes entries & ER attributes) |
+| Cycle tabs | `Tab` / `Shift+Tab` |
+| Quick search / jump | `Ctrl+K` / `Cmd+K` or `/` (fuzzy-search views, boxes, attributes, edges & threads) |
 | Quick actions menu | Right-click canvas, tab, card, or edge |
 | Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
 | Delete selected unlocked elements | `Delete` or `Backspace` |

@@ -48,6 +48,7 @@ import {
   createViewRequest,
   deleteView,
   deleteViewRequest,
+  fetchAllViews,
   fetchThreads,
   fetchView,
   fetchWorkspace,
@@ -64,6 +65,8 @@ import {
   insertWaypointAlongEdge,
   type Point,
 } from "../layout/routing";
+import { buildSearchIndex, type SearchItem } from "../utils/fuzzySearch";
+import { CommandSearchModal } from "./CommandSearchModal";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EdgeCreateModal } from "./EdgeCreateModal";
 import {
@@ -144,6 +147,9 @@ function WorkbenchInner() {
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [allViewsCache, setAllViewsCache] = useState<DesignView[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsEverConnected, setWsEverConnected] = useState(false);
   const [wsGraceExpired, setWsGraceExpired] = useState(false);
@@ -182,10 +188,37 @@ function WorkbenchInner() {
   const pendingSelectNodeIdRef = useRef<string | null>(null);
   const pendingSelectEdgeIdRef = useRef<string | null>(null);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const rightDownPosRef = useRef<Point | null>(null);
 
   activeViewIdRef.current = activeViewId;
   activeViewRef.current = activeView;
   viewHashRef.current = viewHash;
+
+  const tabs = useMemo(() => snapshot?.status.tabs ?? [], [snapshot]);
+
+  const wasRightClickDrag = useCallback(
+    (e: { clientX: number; clientY: number }) => {
+      const start = rightDownPosRef.current;
+      rightDownPosRef.current = null;
+      if (!start) return false;
+      return Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const onCaptureMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) {
+        rightDownPosRef.current = { x: e.clientX, y: e.clientY };
+      } else {
+        rightDownPosRef.current = null;
+      }
+    };
+    window.addEventListener("mousedown", onCaptureMouseDown, true);
+    return () => {
+      window.removeEventListener("mousedown", onCaptureMouseDown, true);
+    };
+  }, []);
 
   const selectedNodeIds = useMemo(
     () => rfNodes.filter((n) => n.selected).map((n) => n.id),
@@ -279,7 +312,7 @@ function WorkbenchInner() {
     async (
       viewId: string,
       options?: { preserveViewport?: boolean; forceResetLayout?: boolean },
-    ) => {
+    ): Promise<DesignView> => {
       const detail = await fetchView(viewId);
       const savedPositions = options?.forceResetLayout
         ? {}
@@ -294,6 +327,7 @@ function WorkbenchInner() {
       edgeRoutesRef.current = options?.forceResetLayout
         ? {}
         : (detail.layout.edge_routes ?? {});
+      activeViewRef.current = detail.view;
       setActiveView(detail.view);
       setViewHash(detail.view_hash);
       setViewDiff(detail.diff);
@@ -314,6 +348,7 @@ function WorkbenchInner() {
           }, 250);
         });
       }
+      return detail.view;
     },
     [fitView, setViewport],
   );
@@ -500,24 +535,6 @@ function WorkbenchInner() {
     showToast("Redone");
   }, [applyHistoryEntry, showToast]);
 
-  // Global keyboard shortcuts: Ctrl+Z / Cmd+Z (Undo) and Ctrl+Shift+Z / Ctrl+Y (Redo)
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (isEditableFocus()) return;
-      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const key = e.key.toLowerCase();
-      if (key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        void handleUndo();
-      } else if ((key === "z" && e.shiftKey) || key === "y") {
-        e.preventDefault();
-        void handleRedo();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleRedo, handleUndo]);
-
   // Node inline action callbacks
   const handleToggleLock = useCallback(
     (nodeId: string) => {
@@ -625,15 +642,24 @@ function WorkbenchInner() {
     (nodeId: string, fieldId: string, nextName: string) => {
       const curr = activeViewRef.current;
       if (!curr) return;
+      const trimmed = nextName.trim();
+      const targetNode = curr.nodes.find((n) => n.id === nodeId);
+      const targetField = targetNode?.fields?.find((f) => f.id === fieldId);
+      if (!targetField) return;
+      if (trimmed === targetField.name) return;
+
       void persistView({
         ...curr,
         nodes: curr.nodes.map((n) => {
           if (n.id !== nodeId) return n;
+          const prevFields = n.fields ?? [];
           return {
             ...n,
-            fields: (n.fields ?? []).map((f) =>
-              f.id === fieldId ? { ...f, name: nextName } : f,
-            ),
+            fields: !trimmed
+              ? prevFields.filter((f) => f.id !== fieldId)
+              : prevFields.map((f) =>
+                  f.id === fieldId ? { ...f, name: trimmed } : f,
+                ),
           };
         }),
       });
@@ -998,6 +1024,10 @@ function WorkbenchInner() {
       targetId?: string,
       preferredTab?: ElementDrawerTab,
     ) => {
+      let targetView = activeViewRef.current;
+      const shouldPreserveViewport =
+        (targetType === "node" || targetType === "edge") && Boolean(targetId);
+
       if (viewId && viewId !== activeViewIdRef.current) {
         pendingSelectNodeIdRef.current =
           targetType === "node" && targetId ? targetId : null;
@@ -1005,7 +1035,9 @@ function WorkbenchInner() {
           targetType === "edge" && targetId ? targetId : null;
         setActiveViewId(viewId);
         window.location.hash = `view=${encodeURIComponent(viewId)}`;
-        await loadViewDetail(viewId);
+        targetView = await loadViewDetail(viewId, {
+          preserveViewport: shouldPreserveViewport,
+        });
       }
 
       if (targetType === "node" && targetId) {
@@ -1018,7 +1050,21 @@ function WorkbenchInner() {
         }, 2800);
         const pos = positionsRef.current[targetId];
         if (pos) {
-          void setCenter(pos.x + 150, pos.y + 90, { zoom: 1, duration: 280 });
+          viewportReadyRef.current = false;
+          requestAnimationFrame(() => {
+            void setCenter(pos.x + 150, pos.y + 90, { zoom: 1, duration: 280 });
+            setTimeout(() => {
+              viewportReadyRef.current = true;
+            }, 320);
+          });
+        } else if (shouldPreserveViewport) {
+          viewportReadyRef.current = false;
+          requestAnimationFrame(() => {
+            void fitView({ padding: 0.16, maxZoom: 1.05, duration: 180 });
+            setTimeout(() => {
+              viewportReadyRef.current = true;
+            }, 250);
+          });
         }
       } else if (targetType === "edge" && targetId) {
         selectSingleEdge(targetId);
@@ -1026,14 +1072,166 @@ function WorkbenchInner() {
         setElementTab(
           preferredTab === "links" ? "spec" : (preferredTab ?? "threads"),
         );
+        const edge = targetView?.edges.find((e) => e.id === targetId);
+        const srcPos = edge ? positionsRef.current[edge.source] : undefined;
+        const tgtPos = edge ? positionsRef.current[edge.target] : undefined;
+        if (srcPos && tgtPos) {
+          const midX = (srcPos.x + tgtPos.x) / 2 + 150;
+          const midY = (srcPos.y + tgtPos.y) / 2 + 90;
+          viewportReadyRef.current = false;
+          requestAnimationFrame(() => {
+            void setCenter(midX, midY, { zoom: 1, duration: 280 });
+            setTimeout(() => {
+              viewportReadyRef.current = true;
+            }, 320);
+          });
+        } else if (shouldPreserveViewport) {
+          viewportReadyRef.current = false;
+          requestAnimationFrame(() => {
+            void fitView({ padding: 0.16, maxZoom: 1.05, duration: 180 });
+            setTimeout(() => {
+              viewportReadyRef.current = true;
+            }, 250);
+          });
+        }
       } else {
         selectSingleNode(null);
         setDrawerMode("workspace");
         setWorkspaceTab("adrs");
       }
     },
-    [loadViewDetail, selectSingleEdge, selectSingleNode, setCenter],
+    [fitView, loadViewDetail, selectSingleEdge, selectSingleNode, setCenter],
   );
+
+  const openSearch = useCallback(() => {
+    setContextMenu(null);
+    setSearchOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    let cancelled = false;
+    setSearchLoading(true);
+    fetchAllViews()
+      .then((res) => {
+        if (cancelled) return;
+        setAllViewsCache(res.views);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAllViewsCache(activeViewRef.current ? [activeViewRef.current] : []);
+      })
+      .finally(() => {
+        if (!cancelled) setSearchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchOpen]);
+
+  const searchIndexItems = useMemo(() => {
+    if (!searchOpen) return [];
+    const byId = new Map(allViewsCache.map((v) => [v.id, v]));
+    if (activeView) {
+      byId.set(activeView.id, activeView);
+    }
+    return buildSearchIndex({
+      tabs,
+      views: Array.from(byId.values()),
+      allThreads,
+      activeViewId,
+    });
+  }, [activeView, activeViewId, allThreads, allViewsCache, searchOpen, tabs]);
+
+  const handleSelectSearchItem = useCallback(
+    (item: SearchItem) => {
+      setSearchOpen(false);
+      if (item.kind === "view" && item.viewId) {
+        void handleSelectView(item.viewId);
+        return;
+      }
+      void handleJumpToTarget(
+        item.viewId,
+        item.targetType ?? "workspace",
+        item.targetId,
+        item.preferredTab,
+      );
+    },
+    [handleJumpToTarget, handleSelectView],
+  );
+
+  // Global keyboard shortcuts: Ctrl/Cmd+K or '/' (Search), Tab / Shift+Tab (Cycle tabs), Ctrl/Cmd+Z / Shift+Z / Y (Undo/Redo)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      const hasOpenDialog = Boolean(document.querySelector('[role="dialog"]'));
+
+      if (mod && !e.altKey && e.key.toLowerCase() === "k") {
+        if (!searchOpen && hasOpenDialog) return;
+        e.preventDefault();
+        setContextMenu(null);
+        setSearchOpen((prev) => !prev);
+        return;
+      }
+
+      if (searchOpen) return;
+      if (isEditableFocus()) return;
+
+      if (
+        !mod &&
+        !e.altKey &&
+        e.key === "/" &&
+        !pendingConn &&
+        !hasOpenDialog
+      ) {
+        e.preventDefault();
+        openSearch();
+        return;
+      }
+
+      if (
+        !mod &&
+        !e.altKey &&
+        e.key === "Tab" &&
+        !pendingConn &&
+        !hasOpenDialog &&
+        tabs.length > 1
+      ) {
+        e.preventDefault();
+        const currIdx = tabs.findIndex(
+          (t) => t.view_id === activeViewIdRef.current,
+        );
+        const delta = e.shiftKey ? -1 : 1;
+        const baseIdx = currIdx === -1 ? 0 : currIdx;
+        const nextIdx = (baseIdx + delta + tabs.length) % tabs.length;
+        const nextTab = tabs[nextIdx];
+        if (nextTab) {
+          void handleSelectView(nextTab.view_id);
+        }
+        return;
+      }
+
+      if (!mod || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        void handleUndo();
+      } else if ((key === "z" && e.shiftKey) || key === "y") {
+        e.preventDefault();
+        void handleRedo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    handleRedo,
+    handleSelectView,
+    handleUndo,
+    openSearch,
+    pendingConn,
+    searchOpen,
+    tabs,
+  ]);
 
   const createBoxAtPosition = useCallback(
     async (flowPos?: Point) => {
@@ -1129,6 +1327,7 @@ function WorkbenchInner() {
   }, [activeView, loadViewDetail, persistView]);
 
   const snapshotDragOrigin = useCallback(() => {
+    setContextMenu(null);
     dragOriginRef.current = {
       nodePositions: structuredClone(positionsRef.current),
       edgeRoutes: structuredClone(edgeRoutesRef.current),
@@ -1886,7 +2085,6 @@ function WorkbenchInner() {
     [activeView, selectedEdgeId],
   );
 
-  const tabs = snapshot?.status.tabs ?? [];
   const viewRequests = snapshot?.status.view_requests ?? [];
   const pendingFeedback = snapshot?.pending_feedback ?? {
     view_hashes: {},
@@ -1973,9 +2171,21 @@ function WorkbenchInner() {
     }
   }, [drawerMode]);
 
+  const handleMoveStart = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleConnectStart = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
   const handlePaneContextMenu = useCallback(
     (e: MouseEvent | ReactMouseEvent) => {
       e.preventDefault();
+      if (wasRightClickDrag(e)) {
+        setContextMenu(null);
+        return;
+      }
       setContextMenu({
         kind: "pane",
         x: e.clientX,
@@ -1986,12 +2196,16 @@ function WorkbenchInner() {
         }),
       });
     },
-    [screenToFlowPosition],
+    [screenToFlowPosition, wasRightClickDrag],
   );
 
   const handleNodeContextMenu = useCallback(
     (e: ReactMouseEvent, node: StructuredFlowNode) => {
       e.preventDefault();
+      if (wasRightClickDrag(e)) {
+        setContextMenu(null);
+        return;
+      }
       selectSingleNode(node.id);
       setContextMenu({
         kind: "node",
@@ -2000,12 +2214,16 @@ function WorkbenchInner() {
         nodeId: node.id,
       });
     },
-    [selectSingleNode],
+    [selectSingleNode, wasRightClickDrag],
   );
 
   const handleEdgeContextMenu = useCallback(
     (e: ReactMouseEvent, edge: StepFlowEdge) => {
       e.preventDefault();
+      if (wasRightClickDrag(e)) {
+        setContextMenu(null);
+        return;
+      }
       selectSingleEdge(edge.id);
       setContextMenu({
         kind: "edge",
@@ -2018,7 +2236,7 @@ function WorkbenchInner() {
         }),
       });
     },
-    [screenToFlowPosition, selectSingleEdge],
+    [screenToFlowPosition, selectSingleEdge, wasRightClickDrag],
   );
 
   const miniMapNodeColor = useCallback(
@@ -2078,6 +2296,7 @@ function WorkbenchInner() {
           await handleSelectView(created.view.id);
         }}
         onDeleteView={handleDeleteView}
+        onOpenSearch={openSearch}
         theme={theme}
         onToggleTheme={toggleTheme}
         bgPattern={bgPattern}
@@ -2169,9 +2388,11 @@ function WorkbenchInner() {
               onNodeDragStop={handleNodeDragStop}
               onSelectionDragStart={snapshotDragOrigin}
               onSelectionDragStop={handleSelectionDragStop}
+              onMoveStart={handleMoveStart}
               onMoveEnd={handleMoveEnd}
               onReconnect={handleReconnectCallback}
               onBeforeDelete={handleBeforeDelete}
+              onConnectStart={handleConnectStart}
               onConnect={handleConnect}
               onNodeClick={handleNodeClick}
               onEdgeClick={handleEdgeClick}
@@ -2327,6 +2548,14 @@ function WorkbenchInner() {
           onClose={() => setContextMenu(null)}
         />
       )}
+
+      <CommandSearchModal
+        open={searchOpen}
+        loading={searchLoading}
+        items={searchIndexItems}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSelectSearchItem}
+      />
 
       {pendingConn && activeView && (
         <EdgeCreateModal

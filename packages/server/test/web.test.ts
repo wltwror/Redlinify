@@ -106,6 +106,14 @@ describe("Redlinify HTTP + WebSocket server", () => {
     };
     expect(viewJson.view.id).toBe("classes");
 
+    const allViewsRes = await fetch(`${server.url}/api/views`);
+    expect(allViewsRes.status).toBe(200);
+    const allViewsJson = (await allViewsRes.json()) as { views: DesignView[] };
+    expect(allViewsJson.views.map((v) => v.id).sort()).toEqual([
+      "algo",
+      "classes",
+    ]);
+
     // Stale base_hash triggers 409
     const stalePut = await fetch(`${server.url}/api/views/classes`, {
       method: "PUT",
