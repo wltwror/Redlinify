@@ -43,11 +43,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@redlinify/shared": "0.1.0",
     "chokidar": "^4.0.3",
     "ws": "^8.18.0",
-    "zod": "^3.24.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/ws": "^8.5.14"

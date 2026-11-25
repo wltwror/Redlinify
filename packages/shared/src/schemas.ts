@@ -127,7 +127,7 @@ export const DesignViewSchema = z
     view.nodes.forEach((node, nodeIdx) => {
       if (nodeIds.has(node.id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["nodes", nodeIdx, "id"],
           message: `Duplicate node id '${node.id}' in view '${view.id}'`,
         });
@@ -138,7 +138,7 @@ export const DesignViewSchema = z
       node.sections.forEach((section, secIdx) => {
         if (sectionIds.has(section.id)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             path: ["nodes", nodeIdx, "sections", secIdx, "id"],
             message: `Duplicate section id '${section.id}' in node '${node.id}'`,
           });
@@ -150,7 +150,7 @@ export const DesignViewSchema = z
       (node.fields ?? []).forEach((field, fieldIdx) => {
         if (fieldIds.has(field.id)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: "custom",
             path: ["nodes", nodeIdx, "fields", fieldIdx, "id"],
             message: `Duplicate field id '${field.id}' in node '${node.id}'`,
           });
@@ -163,7 +163,7 @@ export const DesignViewSchema = z
     view.edges.forEach((edge, edgeIdx) => {
       if (edgeIds.has(edge.id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["edges", edgeIdx, "id"],
           message: `Duplicate edge id '${edge.id}' in view '${view.id}'`,
         });
@@ -172,14 +172,14 @@ export const DesignViewSchema = z
 
       if (!nodeIds.has(edge.source)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["edges", edgeIdx, "source"],
           message: `Edge '${edge.id}' references missing source node '${edge.source}'`,
         });
       }
       if (!nodeIds.has(edge.target)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["edges", edgeIdx, "target"],
           message: `Edge '${edge.id}' references missing target node '${edge.target}'`,
         });
@@ -217,7 +217,7 @@ export const WorkspaceFileSchema = z
     ws.tabs.forEach((tab, idx) => {
       if (tabIds.has(tab.view_id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["tabs", idx, "view_id"],
           message: `Duplicate workspace tab view_id '${tab.view_id}'`,
         });
@@ -229,7 +229,7 @@ export const WorkspaceFileSchema = z
     ws.view_requests.forEach((req, idx) => {
       if (reqIds.has(req.id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["view_requests", idx, "id"],
           message: `Duplicate view_request id '${req.id}'`,
         });
@@ -288,7 +288,7 @@ export const DesignThreadSchema = z
       !thread.view_id
     ) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["view_id"],
         message: `view_id is required when target_type is '${thread.target_type}'`,
       });
@@ -298,7 +298,7 @@ export const DesignThreadSchema = z
       !thread.target_id
     ) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["target_id"],
         message: `target_id is required when target_type is '${thread.target_type}'`,
       });

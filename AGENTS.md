@@ -7,7 +7,7 @@ This document captures architectural invariants, conventions, and verification c
 ## 1. Monorepo Layout
 
 * `SPEC.md` — Authoritative project specification across all 5 milestones.
-* `packages/shared` (`@redlinify/shared`) — Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
+* `packages/shared` (`@redlinify/shared`) — Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
 * `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
 * `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + `elkjs` + Tailwind CSS browser workbench.
 * `skill/SKILL.md` — Agent workflow skill instructions.
@@ -20,8 +20,8 @@ This document captures architectural invariants, conventions, and verification c
    * `packages/shared` and `packages/server` use `"module": "NodeNext"` and `"moduleResolution": "NodeNext"`.
    * **Every relative import inside `packages/shared/src/` and `packages/server/src/` MUST use an explicit `.js` extension**.
    * Browser code MUST import from `@redlinify/shared/browser`, never `@redlinify/shared` (which pulls `node:fs` / `node:child_process`).
-2. **Zod v3 Compatibility**:
-   * `@redlinify/shared` and `@redlinify/server` pin `zod` (`^3.24.2`, Zod v3) so `@modelcontextprotocol/sdk` consumes schemas directly without Zod v4 runtime mismatches. Note `.superRefine(...)` produces `ZodEffects` (no `.shape`).
+2. **Zod v4 + MCP SDK Compatibility**:
+   * `@redlinify/shared` and `@redlinify/server` use `zod` (`^4.6.7`) alongside `@modelcontextprotocol/sdk` (`^1.32.2`), which supports Zod v4 natively. In `.superRefine(...)`, use `code: "custom"` (not `z.ZodIssueCode.custom`), and note `.superRefine(...)` has no `.shape`.
 3. **Zero Pixel Coordinates in Shared Truth**:
    * `.design/workspace.json`, `.design/views/*.json`, and `.design/threads/*.json` are Git-tracked semantic truth and MUST NEVER contain layout positions (`x`, `y`) or viewport zoom.
    * Visual state lives solely in `.design/.layout/*.json` (gitignored).

@@ -274,7 +274,7 @@ npm run build       # Build @redlinify/shared, @redlinify/server, and @redlinify
 npm test            # Run Vitest unit & integration suites
 ```
 
-* `packages/shared` (`@redlinify/shared`): Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (`@redlinify/shared/browser` for UI).
+* `packages/shared` (`@redlinify/shared`): Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (`@redlinify/shared/browser` for UI).
 * `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
 * `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
 

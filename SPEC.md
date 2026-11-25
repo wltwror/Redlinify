@@ -22,9 +22,9 @@ Build **Redlinify**, a local-first, repo-native collaborative design workbench f
 
 ## 2. Tech Stack & Process Model
 
-Redlinify is a **strict TypeScript monorepo** managed via **npm workspaces** (Node `>=22.0.0`, ESM with `NodeNext` resolution) so Zod v3 schemas, storage locking, guards, and semantic diff types are shared across the MCP server, HTTP/WebSocket server, and React UI with zero drift:
+Redlinify is a **strict TypeScript monorepo** managed via **npm workspaces** (Node `>=22.12.0`, ESM with `NodeNext` resolution) so Zod v4 schemas, storage locking, guards, and semantic diff types are shared across the MCP server, HTTP/WebSocket server, and React UI with zero drift:
 
-* **Shared (`packages/shared`):** TypeScript + `zod` (`^3.24.2`, Zod v3 for `@modelcontextprotocol/sdk` compatibility) schemas, canonical hashing, lock/patch guards, cross-process `.design/.lock` + atomic temp-rename JSON I/O, and the semantic diff engine.
+* **Shared (`packages/shared`):** TypeScript + `zod` (`^4.6.7`) schemas, canonical hashing, lock/patch guards, cross-process `.design/.lock` + atomic temp-rename JSON I/O, and the semantic diff engine.
 * **Server/CLI (`packages/server`):**
   * `@modelcontextprotocol/sdk` (stdio transport via `redlinify mcp`).
   * CLI commands: `redlinify init`, `redlinify mcp`, `redlinify ui [--dir <path>] [--port <port>]`.
@@ -41,7 +41,7 @@ Redlinify/
 ├── packages/
 │   ├── shared/
 │   │   ├── src/
-│   │   │   ├── schemas.ts      # Zod v3 schemas & regex constraints
+│   │   │   ├── schemas.ts      # Zod v4 schemas & regex constraints
 │   │   │   ├── hash.ts         # Canonical JSON serialization & view_hash
 │   │   │   ├── diff.ts         # Semantic diff engine (checkpoint vs. current)
 │   │   │   ├── guards.ts       # Lock guards, code_ref preservation & applyViewPatch
@@ -95,7 +95,7 @@ Inside any project using Redlinify, all state lives in `.design/`:
 
 ## 4. Exact Data Schemas
 
-Implemented strictly with Zod v3 in `packages/shared/src/schemas.ts`:
+Implemented strictly with Zod v4 in `packages/shared/src/schemas.ts`:
 
 * **ID & Slug Guardrails:**
   * `ID_SLUG_REGEX = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/` — enforced on `view.id`, `node.id`, `section.id`, `edge.id`, `thread.id`, `view_request.id` (prevents path traversal and guarantees filesystem safety).
@@ -289,7 +289,7 @@ Ship a ready-to-install `SKILL.md` defining the agent's behavioral contract:
 
 ## 9. Phased Implementation Plan
 
-1. **Milestone 1 — Core Schema, Storage & Diff Engine (`packages/shared`):** Implement Zod v3 schemas, canonical hashing, lock/patch guards, cross-process locking + atomic `.design/` file I/O, missing-checkpoint Git fallback, and `computeSemanticDiff` with comprehensive unit & integration tests.
+1. **Milestone 1 — Core Schema, Storage & Diff Engine (`packages/shared`):** Implement Zod v4 schemas, canonical hashing, lock/patch guards, cross-process locking + atomic `.design/` file I/O, missing-checkpoint Git fallback, and `computeSemanticDiff` with comprehensive unit & integration tests.
 2. **Milestone 2 — CLI & MCP Server (`packages/server`):** Implement `redlinify init` and `redlinify mcp` over stdio with all 6 lean MCP tools and end-to-end tests against `.design/`.
 3. **Milestone 3 — Local Web Server & Read-Only Multi-Tab Canvas (`packages/server` + `packages/ui`):** Build `redlinify ui` (`127.0.0.1:4173` REST + WebSocket + `chokidar` self-echo suppression), `TabBar`, `StructuredNode`, `StepEdge`, and `elkjs` auto-layout (`TB`/`LR`) with `.layout/` persistence.
 4. **Milestone 4 — Interactive Editing, Threads & Cross-Tab Links:** Implement inline editing, `+ Add Box`, edge creation, `InspectorDrawer` (Spec / Threads / Links & Code), `+ Request View` stubs, and WebSocket live reload without losing viewport state.

@@ -353,6 +353,8 @@ describe("DesignStorage", () => {
       cwd: dir,
     });
     execFileSync("git", ["config", "user.name", "Tester"], { cwd: dir });
+    execFileSync("git", ["config", "commit.gpgsign", "false"], { cwd: dir });
+    execFileSync("git", ["config", "tag.gpgsign", "false"], { cwd: dir });
 
     const storage = new DesignStorage(dir);
     await storage.initWorkspace("GitRepo");
@@ -363,7 +365,7 @@ describe("DesignStorage", () => {
 
     // Commit .design/ (without .checkpoint/ since .design/.gitignore ignores it)
     execFileSync("git", ["add", ".design"], { cwd: dir });
-    execFileSync("git", ["commit", "-m", "commit initial design"], {
+    execFileSync("git", ["commit", "--no-gpg-sign", "-m", "commit initial design"], {
       cwd: dir,
     });
 

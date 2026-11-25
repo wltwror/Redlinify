@@ -1,4 +1,3 @@
-import ELK from "elkjs/lib/elk.bundled.js";
 import type {
   DiagramType,
   DesignNode,
@@ -6,7 +5,19 @@ import type {
   ViewLayout,
 } from "@redlinify/shared/browser";
 
-const elk = new ELK();
+type ElkInstance = InstanceType<
+  typeof import("elkjs/lib/elk.bundled.js").default
+>;
+let elkPromise: Promise<ElkInstance> | null = null;
+
+function getElk(): Promise<ElkInstance> {
+  if (!elkPromise) {
+    elkPromise = import("elkjs/lib/elk.bundled.js").then(
+      ({ default: ELK }) => new ELK(),
+    );
+  }
+  return elkPromise;
+}
 
 export const MAX_VISIBLE_SECTION_ITEMS = 5;
 export const MAX_VISIBLE_ER_FIELDS = 8;
@@ -74,6 +85,18 @@ export async function computeAutoLayout(
     return {};
   }
 
+  if (
+    !options?.forceReset &&
+    view.nodes.every((node) => Boolean(savedLayout.positions[node.id]))
+  ) {
+    const preserved: Record<string, { x: number; y: number }> = {};
+    for (const node of view.nodes) {
+      const saved = savedLayout.positions[node.id]!;
+      preserved[node.id] = { x: saved.x, y: saved.y };
+    }
+    return preserved;
+  }
+
   const elkNodes = view.nodes.map((node) => {
     const est = estimateNodeSize(node, view.diagram_type);
     const measured = options?.measured?.[node.id];
@@ -91,6 +114,7 @@ export async function computeAutoLayout(
   }));
 
   const isEr = view.diagram_type === "er";
+  const elk = await getElk();
   const laidOut = await elk.layout({
     id: view.id,
     layoutOptions: {
