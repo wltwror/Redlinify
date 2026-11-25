@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ZodError, z } from "zod";
 import {
@@ -203,6 +206,19 @@ function omitNullFields<T extends Record<string, unknown>>(obj: T): Record<strin
   return out;
 }
 
+function readPackageVersion(): string {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.resolve(here, "../package.json");
+    const parsed = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+      version?: unknown;
+    };
+    return typeof parsed.version === "string" ? parsed.version : "0.2.1";
+  } catch {
+    return "0.2.1";
+  }
+}
+
 export function createRedlinifyMcpServer(
   storage: DesignStorage,
   options?: RedlinifyMcpOptions,
@@ -210,7 +226,7 @@ export function createRedlinifyMcpServer(
   const server = new McpServer(
     {
       name: "redlinify",
-      version: "0.2.0",
+      version: readPackageVersion(),
     },
     {
       instructions: MCP_WORKFLOW_INSTRUCTIONS,

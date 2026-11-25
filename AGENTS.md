@@ -6,10 +6,11 @@ This document captures architectural invariants, conventions, and verification c
 
 ## 1. Monorepo Layout
 
-* `SPEC.md` — Authoritative project specification across all 5 milestones.
+* `SPEC.md` — Authoritative architecture, schema, MCP, and workbench specification.
 * `packages/shared` (`@redlinify/shared`) — Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
 * `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop|update`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
-* `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + `elkjs` + Tailwind CSS browser workbench.
+* `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + lazy-loaded `elkjs` + Tailwind CSS browser workbench supporting structured architecture cards and Crow's Foot ER diagrams, Dark/Light + Dots/Grid themes, scrollable tab bar (`Tab`/`Shift+Tab`), typo-tolerant fuzzy search, diagram export (`PNG`/`SVG`/`Mermaid`/`JSON`), Vite `manualChunks` splitting, and unit tests in `packages/ui/test/`.
+* `scripts/install.sh` & `scripts/install.ps1` — One-line installers (macOS/Linux/WSL and Windows PowerShell) that clone/fast-forward `~/.redlinify`, build, and link `redlinify` while keeping `.git` intact for `redlinify update`.
 * `skill/SKILL.md` — Agent workflow skill instructions.
 
 ---
@@ -24,7 +25,7 @@ This document captures architectural invariants, conventions, and verification c
    * `@redlinify/shared` and `@redlinify/server` use `zod` (`^4.6.7`) alongside `@modelcontextprotocol/sdk` (`^1.32.2`), which supports Zod v4 natively. In `.superRefine(...)`, use `code: "custom"` (not `z.ZodIssueCode.custom`), and note `.superRefine(...)` has no `.shape`.
 3. **Zero Pixel Coordinates in Shared Truth**:
    * `.design/workspace.json`, `.design/views/*.json`, and `.design/threads/*.json` are Git-tracked semantic truth and MUST NEVER contain layout positions (`x`, `y`) or viewport zoom.
-   * Visual state lives solely in `.design/.layout/*.json` (gitignored).
+   * Visual state lives solely in `.design/.layout/*.json` (positions, `edge_routes` handles & bend waypoints, and viewport zoom), and detached UI server metadata lives in `.design/.ui-server.json` (both gitignored).
 4. **Cross-Process Locking & Atomic Writes**:
    * All `.design/` state reads-before-writes and mutations MUST run inside `DesignStorage.withLock(...)` (`.design/.lock` created via `wx`, with stale age/PID recovery) and persist via `writeJsonAtomic` (temp file `.tmp-*` in same directory -> `fsync` -> close -> `rename`).
    * Threads are stored one file per thread (`.design/threads/{thread_id}.json`), never in one monolithic `threads.json`.
@@ -43,8 +44,8 @@ This document captures architectural invariants, conventions, and verification c
    * Preserve existing runtime properties (`{ ...(existing ?? {}), ... }`) and `selected` flags inside functional `setRfNodes((prev) => ...)` / `setRfEdges((prev) => ...)` updaters.
    * Keep `.react-flow__edgelabel-renderer { z-index: 1100 !important; }` above elevated `.react-flow__edge.selected` (`z-index: 1000`) in `index.css` so edge `.react-flow__edge-interaction` paths do not swallow clicks on `<EdgeLabelRenderer>` bend handles.
    * Keep Light/Dark styling on `--rl-*` CSS variable tokens (`tailwind.config.js` + `index.css`), keep `locked` violet vs `needs_input` amber, keep per-view `HistoryEntry` undo/redo covering both semantic views and edge routes/positions, and run interactive Playwright click/drag/undo/theme checks after UI edits.
-9. **Branch & Release Discipline (Post-`v0.2.0`)**:
-   * After `v0.2.0`, do **NOT** push directly to `main`; create feature/fix branches and open pull requests instead.
+9. **Branch & Release Discipline (Post-`v0.2.1`)**:
+   * After `v0.2.1`, do **NOT** push directly to `main`; create feature/fix branches and open pull requests instead.
 
 ---
 
@@ -54,5 +55,6 @@ This document captures architectural invariants, conventions, and verification c
 npm install         # Install workspace dependencies
 npm run typecheck   # Type-check all workspace packages in topological order
 npm run build       # Build all workspace packages in topological order
-npm test            # Run Vitest test suites (shared + server)
+npm test            # Run Vitest test suites (shared + server + ui)
+npm run update      # Self-update local clone, rebuild, and restart active UI
 ```

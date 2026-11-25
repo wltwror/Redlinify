@@ -163,13 +163,21 @@ Resolved architectural threads move cleanly into the searchable **Decision Log**
 
 ## Zero-Friction Setup
 
-Requires **Node.js >= 22.12.0**.
+Requires **Node.js >= 22.12.0** and **Git**.
+
+**macOS / Linux / WSL:**
 
 ```bash
-git clone https://github.com/wltwror/Redlinify.git
-cd Redlinify && npm install && npm run build && npm test
-npm link -w @redlinify/server
+curl -fsSL https://raw.githubusercontent.com/wltwror/Redlinify/main/scripts/install.sh | bash
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/wltwror/Redlinify/main/scripts/install.ps1 | iex
+```
+
+The installer clones Redlinify into `~/.redlinify`, builds all packages, and links `redlinify` cleanly (falling back to `~/.local/bin/redlinify` without `sudo` if global `npm link` is restricted).
 
 Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP client—no manual `init` or UI terminal required:
 
@@ -193,7 +201,13 @@ redlinify update --check  # Preview available updates without modifying your loc
 ```
 
 <details>
-<summary>Alternative MCP setup (without <code>npm link</code>) &amp; manual CLI commands</summary>
+<summary>Manual install, setup without global link, &amp; CLI commands</summary>
+
+```bash
+git clone https://github.com/wltwror/Redlinify.git
+cd Redlinify && npm install && npm run build && npm test
+npm link -w @redlinify/server
+```
 
 ```json
 {
