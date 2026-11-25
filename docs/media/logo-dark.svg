@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 144" width="680" height="144" fill="none" role="img" aria-label="Redlinify — Git-native visual workbench for developers and AI coding agents">
+  <defs>
+    <linearGradient id="tileGrad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#11192e" />
+      <stop offset="100%" stop-color="#060913" />
+    </linearGradient>
+    <radialGradient id="tileGlowRose" cx="0.72" cy="0.32" r="0.65">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#f43f5e" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="tileGlowViolet" cx="0.25" cy="0.25" r="0.6">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.26" />
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="redWord" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fda4af" />
+      <stop offset="50%" stop-color="#fb7185" />
+      <stop offset="100%" stop-color="#f43f5e" />
+    </linearGradient>
+    <linearGradient id="lineGrad" x1="68" y1="38" x2="88" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fb7185" />
+      <stop offset="100%" stop-color="#e11d48" />
+    </linearGradient>
+  </defs>
+
+  <!-- Emblem Mark (96x96 centered vertically on left) -->
+  <g transform="translate(20, 24) scale(0.75)">
+    <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#tileGrad)" stroke="#334155" stroke-width="2" />
+    <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#tileGlowViolet)" />
+    <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#tileGlowRose)" />
+    <g fill="#475569" opacity="0.55">
+      <circle cx="24" cy="24" r="1.2" /><circle cx="44" cy="24" r="1.2" /><circle cx="64" cy="24" r="1.2" /><circle cx="84" cy="24" r="1.2" /><circle cx="104" cy="24" r="1.2" />
+      <circle cx="24" cy="44" r="1.2" /><circle cx="44" cy="44" r="1.2" /><circle cx="64" cy="44" r="1.2" /><circle cx="84" cy="44" r="1.2" /><circle cx="104" cy="44" r="1.2" />
+      <circle cx="24" cy="64" r="1.2" /><circle cx="44" cy="64" r="1.2" /><circle cx="64" cy="64" r="1.2" /><circle cx="84" cy="64" r="1.2" /><circle cx="104" cy="64" r="1.2" />
+      <circle cx="24" cy="84" r="1.2" /><circle cx="44" cy="84" r="1.2" /><circle cx="64" cy="84" r="1.2" /><circle cx="84" cy="84" r="1.2" /><circle cx="104" cy="84" r="1.2" />
+      <circle cx="24" cy="104" r="1.2" /><circle cx="44" cy="104" r="1.2" /><circle cx="64" cy="104" r="1.2" /><circle cx="84" cy="104" r="1.2" /><circle cx="104" cy="104" r="1.2" />
+    </g>
+    <path d="M44 58 V86 Q44 92 50 92 H60" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.45" stroke-dasharray="3.5 3.5" stroke-linecap="round" />
+    <rect x="20" y="20" width="50" height="38" rx="8" fill="#18143a" stroke="#8b5cf6" stroke-width="2.4" />
+    <rect x="26" y="27" width="22" height="4.5" rx="2.25" fill="#ddd6fe" />
+    <rect x="26" y="36" width="36" height="3.5" rx="1.75" fill="#7c3aed" opacity="0.75" />
+    <rect x="26" y="43" width="28" height="3.5" rx="1.75" fill="#5b21b6" opacity="0.85" />
+    <path d="M57 29.5 V27.5 A2.5 2.5 0 0 1 62 27.5 V29.5" stroke="#c4b5fd" stroke-width="1.6" stroke-linecap="round" />
+    <rect x="55.5" y="29.5" width="8" height="6.5" rx="1.5" fill="#a78bfa" />
+    <rect x="58" y="70" width="50" height="38" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2.4" />
+    <rect x="64" y="77" width="24" height="4.5" rx="2.25" fill="#e2e8f0" />
+    <rect x="92" y="76.5" width="10" height="5.5" rx="2.75" fill="#f59e0b" />
+    <rect x="64" y="86" width="38" height="3.5" rx="1.75" fill="#475569" />
+    <rect x="64" y="93" width="29" height="3.5" rx="1.75" fill="#334155" />
+    <path d="M70 39 H80 Q86 39 86 45 V65" stroke="url(#lineGrad)" stroke-width="3.2" stroke-linecap="round" />
+    <path d="M81.5 62.5 L86 68 L90.5 62.5" stroke="#fb7185" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="86" cy="48" r="5" fill="#f43f5e" stroke="#0f172a" stroke-width="2" />
+    <circle cx="86" cy="48" r="2" fill="#ffffff" />
+  </g>
+
+  <!-- Wordmark -->
+  <text x="136" y="74" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="-1.6">
+    <tspan fill="url(#redWord)">Red</tspan><tspan fill="#f8fafc">linify</tspan>
+  </text>
+
+  <!-- Decorative redline underline rule accent under "Red" -->
+  <rect x="138" y="84" width="96" height="3" rx="1.5" fill="#f43f5e" opacity="0.85" />
+  <circle cx="239" cy="85.5" r="2.5" fill="#fb7185" />
+
+  <!-- Subtitle -->
+  <text x="137" y="112" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="500" fill="#94a3b8" letter-spacing="0.1">
+    Git-native visual workbench for developers &amp; AI coding agents
+  </text>
+</svg>

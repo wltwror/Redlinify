@@ -1,34 +1,134 @@
-# Redlinify
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/logo-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/media/logo-light.svg" />
+    <img src="docs/media/logo-dark.svg" alt="Redlinify — Git-native visual workbench for developers & AI coding agents" width="520" />
+  </picture>
+</p>
 
-**Stop negotiating software architecture and DB schemas in linear chat threads.**
+<p align="center">
+  <strong>Stop negotiating software architecture and DB schemas in linear chat threads.</strong>
+</p>
 
-Redlinify gives you and your AI coding agent a shared, Git-tracked visual workbench directly inside your repository. Your agent drafts interactive architecture and ER diagrams over MCP (and starts the local browser UI for you automatically); you tweak boxes, bend lines, lock approved parts, and pin questions directly onto nodes—then prompt the agent to pull a compact **semantic diff** instead of re-reading pixels or screenshots.
+<p align="center">
+  <a href="https://github.com/wltwror/Redlinify/actions/workflows/ci.yml"><img src="https://github.com/wltwror/Redlinify/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="#zero-friction-setup"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg" alt="Node >= 22" /></a>
+  <a href="#development--architecture"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg" alt="Strict TypeScript" /></a>
+  <a href="#mcp-tool-reference-10-tools"><img src="https://img.shields.io/badge/MCP-10%20tools-8b5cf6.svg" alt="MCP 10 Tools" /></a>
+</p>
+
+<p align="center">
+  <a href="#interactive-demo">Demo</a> ·
+  <a href="#how-it-works">How It Works</a> ·
+  <a href="#why-redlinify">Features</a> ·
+  <a href="#visual-tour">Screenshots</a> ·
+  <a href="#zero-friction-setup">Setup</a> ·
+  <a href="#mcp-tool-reference-10-tools">MCP Tools</a>
+</p>
+
+<p align="center">
+  Redlinify gives you and your AI coding agent a shared, Git-tracked visual workbench directly inside your repo. Agents draft diagrams over MCP and launch the local browser UI automatically; you edit nodes, reply to questions, bend lines, and lock approved specs—then send back a compact <strong>semantic diff</strong> with zero pixel noise.
+</p>
 
 ---
 
-## Why Use Redlinify?
+## Interactive Demo
 
-* **Built for Two-Way Editing (Unlike Mermaid or ASCII):** Mermaid renders read-only images, and ASCII boxes break on every edit. In Redlinify, both you and your agent edit the exact same structured `.design/views/*.json` graph.
-* **Lock Approved Pieces (`Violet`) Against Agent Rewrites:** Once a service contract or entity schema is settled, lock it. The agent is strictly blocked from mutating or deleting locked nodes and edges—while still linking source files (`code_refs`) as implementation completes.
-* **Token-Efficient Semantic Diffs (Zero Pixel Bloat):** Positions, edge bends, and zoom stay isolated in `.design/.layout/*.json` (gitignored). Agent checkpoints (`.design/.checkpoint/*.json`) tell the agent *only* the structural changes you made (`+added node`, `~changed field`, `open thread`).
-* **Architectural & Crow's Foot ER Modes:** Model class/system architectures alongside database schemas (`PK`, `FK`, `UQ`, `IDX`, nullable `○` / mandatory `*`, Crow's foot cardinalities, and `is-a` subtypes).
-* **Decisions & Context Stay Attached to the Code:** Resolved threads graduate into a searchable **Decision Log** under **Decisions** and link back to code references across `draft → needs_input → approved → implemented | drifted`.
-* **Local-First & Zero Telemetry:** Everything lives in plain JSON inside `.design/` in your Git repo; the UI binds strictly to loopback (`127.0.0.1`).
+<!-- Tip: For GitHub's native HD HTML5 video player, drag docs/media/demo.mp4 into the GitHub web editor on GitHub.com and replace the <img> tag below with the generated https://github.com/user-attachments/assets/... URL -->
+<p align="center">
+  <img src="docs/media/demo.gif" alt="Redlinify interactive walkthrough: animated logo intro, replying to agent comments, pinning change requests & violet locks, manual canvas modeling & edge connections, Crow's foot ER bending with Ctrl+Z, semantic Pending Review diff, Decision Log, and Light + Grid mode" width="900" />
+</p>
+
+<p align="center">
+  <sub>Animated logo intro · Read &amp; reply to agent comments · Pin change requests &amp; lock in violet · Model &amp; bend ER lines (<code>Ctrl+Z</code>) · Compact semantic diff &amp; Decision Log · <a href="docs/media/demo.mp4">Watch 47s HD MP4</a></sub>
+</p>
 
 ---
 
-## How It Works in 30 Seconds
+## How It Works
 
-```text
-1. Ask your agent to design a feature or schema
-   └─ Agent calls upsert_view() → auto-creates .design/, starts the local UI, returns ui_url
+Redlinify runs a closed, Git-native collaboration loop between your coding agent and your browser—centered around a zero-coordinate `.design/` folder in your repository:
 
-2. Open http://127.0.0.1:4173 (live-synced via WebSockets)
-   └─ Edit boxes/fields, bend lines, reply to amber questions, lock approved cards in violet
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/workflow-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/media/workflow-light.svg" />
+    <img src="docs/media/workflow-dark.svg" alt="Redlinify 4-stage core workflow loop centered around .design/ Git Truth: Agent Drafts & Asks -> Comment & Model -> Lock & Decide -> Compact Semantic Diff & Code" width="920" />
+  </picture>
+</p>
 
-3. Tell your agent: "Review my feedback in Redlinify"
-   └─ Agent calls get_pending_feedback() → receives clean semantic diff + replies, implements code
-```
+| Stage | Where | What Happens |
+| :--- | :--- | :--- |
+| **01 · Agent Drafts & Asks** | `MCP stdio` | Agent calls `upsert_view()` / `patch_view()`, auto-starts `127.0.0.1:4173`, and pins **amber** questions for your input. |
+| **02 · Comment & Model** | `Browser UI` | Over live WebSockets, you read & reply to agent threads, right-click to add nodes or ER fields, connect edges, and drag bends. |
+| **03 · Lock & Decide** | `Violet Guard` | Lock approved cards and contracts in **violet** so the agent cannot overwrite them; resolved threads graduate to **Decisions**. |
+| **04 · Semantic Diff & Code** | `Zero Bloat` | `get_pending_feedback()` returns only structural changes (`+node`, `~field`, replies), and `sync_code_refs()` links built files back to nodes. |
+
+---
+
+## Why Redlinify?
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>🔄 Two-Way Structured Editing</strong><br />
+      Unlike read-only Mermaid or brittle ASCII boxes, you and your agent edit the exact same clean <code>.design/views/*.json</code> graph.
+    </td>
+    <td width="50%" valign="top">
+      <strong>🔒 Violet Locks Protect Approved Specs</strong><br />
+      Lock finalized nodes and edges so agents cannot overwrite them—while still letting <code>sync_code_refs()</code> update code links and build status.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>⚡ Token-Efficient Semantic Diffs</strong><br />
+      Pixel <code>x/y</code> coordinates, edge bends, and zoom stay gitignored in <code>.design/.layout/</code>. Agents read only structural deltas against checkpoints.
+    </td>
+    <td width="50%" valign="top">
+      <strong>🗄️ System Architecture &amp; Crow's Foot ER</strong><br />
+      Switch seamlessly between module diagrams and relational ER models (<code>PK</code>, <code>FK</code>, <code>UQ</code>, mandatory <code>*</code> vs optional <code>○</code>, and <code>is-a</code> subtypes).
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>💬 Comments &amp; Searchable Decision Log</strong><br />
+      Discuss edge cases right on boxes or lines; resolved discussions become an anchored, searchable ADR log inside <strong>Decisions</strong>.
+    </td>
+    <td width="50%" valign="top">
+      <strong>🏠 Local-First &amp; Zero Telemetry</strong><br />
+      Everything lives as readable JSON in your Git repo, and the UI binds strictly to loopback (<code>127.0.0.1</code>) with zero cloud dependencies.
+    </td>
+  </tr>
+</table>
+
+---
+
+## Visual Tour
+
+### System Architecture — Dark Mode
+
+Approved contracts stay **locked in violet** with live `code_refs` badges attached, while nodes awaiting human feedback highlight in **amber** both on the canvas and in the MiniMap.
+
+<p align="center">
+  <img src="docs/media/screenshot-architecture-dark.png" alt="Redlinify System Architecture view in Dark Mode showing violet locked nodes, amber needs_input node, MiniMap callout, and orthogonal numbered edges" width="880" />
+</p>
+
+### Crow's Foot ER Modeling — Light Mode & Drafting Grid
+
+Model entities with `PK` / `FK` / `UQ` badges, mandatory (`*`) vs nullable (`○`) columns, Crow's foot cardinalities, and subtype forks—complete with instant **Dark/Light** and **Dots/Grid** toggles.
+
+<p align="center">
+  <img src="docs/media/screenshot-er-light.png" alt="Redlinify Sandbox Fleet ER Model in Light Mode with Drafting Grid, Crow's foot cardinalities, subtype forks, and PK/FK/UQ badges" width="880" />
+</p>
+
+### Searchable Decision Log & Anchored Threads
+
+Resolved architectural threads move cleanly into the searchable **Decision Log**, preserving full multi-turn context alongside every node and edge across `draft → needs_input → approved → implemented | drifted`.
+
+<p align="center">
+  <img src="docs/media/screenshot-decisions-dark.png" alt="Redlinify Decisions drawer showing searchable resolved Decision Log entries with expandable agent and human discussion transcripts" width="880" />
+</p>
 
 ---
 
@@ -38,22 +138,11 @@ Requires **Node.js >= 22.0.0**.
 
 ```bash
 git clone https://github.com/wltwror/Redlinify.git
-cd Redlinify
-npm install
-npm run build
-npm test
-```
-
-Expose the `redlinify` binary globally (recommended so any project can use it without paths):
-
-```bash
+cd Redlinify && npm install && npm run build && npm test
 npm link -w @redlinify/server
-redlinify --version
 ```
 
-### Connect Your Coding Agent (Only Step Needed Per Machine)
-
-Add Redlinify to Claude Code, Cursor, OpenCode, or any MCP-compatible client:
+Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP client—no manual `init` or UI terminal required:
 
 ```json
 {
@@ -66,7 +155,11 @@ Add Redlinify to Claude Code, Cursor, OpenCode, or any MCP-compatible client:
 }
 ```
 
-Or without `npm link`:
+* Built-in MCP instructions teach your agent how to draft views, pin questions, respect violet locks, and resolve decisions automatically.
+* On the first diagram write in any Git repo, Redlinify initializes `.design/` and spawns the detached loopback UI daemon (`127.0.0.1:4173`), returning `ui_url`.
+
+<details>
+<summary>Alternative MCP setup (without <code>npm link</code>) &amp; manual CLI commands</summary>
 
 ```json
 {
@@ -79,30 +172,26 @@ Or without `npm link`:
 }
 ```
 
-**No manual `init` or manual `ui` terminal required by default:**
-* The MCP server embeds built-in workflow instructions automatically so agents know how to draft views, pin questions, respect locks, and resolve decisions out of the box (you can also load [skill/SKILL.md](skill/SKILL.md) for custom skills).
-* Running `redlinify mcp` from a project directory automatically locates your Git root, initializes `.design/` on the first diagram write, and spawns the detached loopback UI daemon (`127.0.0.1:4173`, picking the next free port if busy).
-* Prefer opening the browser manually or shutting down the background UI? Pass `--no-ui` / `--open` on `mcp`, or use the CLI directly:
-
 ```bash
-redlinify ui --open --dir /path/to/repo   # Launch UI and open browser immediately
-redlinify stop --dir /path/to/repo        # Stop the detached UI daemon for a repo
-redlinify init --dir /path/to/repo        # Pre-initialize .design/ explicitly
+redlinify mcp --open --dir /path/to/repo   # Start MCP + auto-open browser immediately
+redlinify mcp --no-ui --dir /path/to/repo  # Headless MCP without auto-starting the UI
+redlinify ui --open --dir /path/to/repo    # Launch workbench UI standalone
+redlinify stop --dir /path/to/repo         # Stop the detached UI daemon
+redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 ```
+
+</details>
 
 ---
 
-## Repository Structure (`.design/` inside your project)
+## Repository Structure (`.design/`)
 
 ```text
 .design/
 ├── workspace.json              # Git-tracked: tab order, metadata, pending view_requests
-├── views/
-│   ├── architecture.json       # Git-tracked: semantic graph (zero pixel coordinates)
-│   └── database_er.json
-├── threads/
-│   └── thr_a1b2c3d4e5f6.json   # Git-tracked: one file per anchored thread / decision
-├── .layout/                    # Gitignored: manual node positions, edge bends, zoom
+├── views/*.json                # Git-tracked: semantic graphs (zero pixel coordinates)
+├── threads/*.json              # Git-tracked: anchored discussions & resolved Decisions
+├── .layout/                    # Gitignored: node positions, edge bend points, zoom
 ├── .checkpoint/                # Gitignored: last agent-authored semantic snapshot
 └── .ui-server.json             # Gitignored: active detached UI server PID & port
 ```
@@ -113,20 +202,23 @@ redlinify init --dir /path/to/repo        # Pre-initialize .design/ explicitly
 
 | Tool | Purpose |
 | :--- | :--- |
-| `get_workspace_status` | List all tabs (`view_hash`, triage/drifted counts, human edit flags), `entity_ref` slugs, pending `view_requests`, and running `ui_url`. |
-| `open_workbench` | Ensure the local detached workbench UI is running and return (or open in browser) the direct URL / deep link to a tab. |
+| `get_workspace_status` | List all tabs (`view_hash`, triage/drifted counts, human edit flags), `entity_ref` slugs, `view_requests`, and active `ui_url`. |
+| `open_workbench` | Ensure the detached loopback workbench UI is running and return (or open) a direct deep link to any tab. |
 | `get_view` | Read a semantic `DesignView` (zero coordinates), its `view_hash`, open threads, and optional 1-line Decision summaries. |
 | `get_pending_feedback` | Pull semantic diffs since agent checkpoints, `view_hashes`, pending `view_requests`, and open threads awaiting agent response. |
-| `upsert_view` | Create or replace a semantic `DesignView` with `base_hash` concurrency and lock protection; auto-starts the local UI and returns `ui_url`. |
-| `patch_view` | Apply targeted edits (`meta`, add/update/remove nodes or edges, `section_ops`) with `base_hash` and lock guards; returns `ui_url`. |
-| `acknowledge_feedback` | Advance agent checkpoints when human edits are accepted as-is. |
-| `post_thread_message` | Open an anchored thread (`question`, `change_request`, `decision`, `drift_alert`), reply, or resolve with a 1-line `resolution_summary`. |
-| `get_node_history` | Query full transcripts of resolved Decision (ADR) threads by `target_id`, `entity_ref`, `view_id`, or text search. |
-| `sync_code_refs` | Link source `code_refs` (`path:symbol`) and update `implemented` / `drifted` status without clobbering unrelated human edits. |
+| `upsert_view` | Create or replace a semantic `DesignView` with `base_hash` concurrency and lock protection; auto-starts the UI. |
+| `patch_view` | Apply targeted edits (`meta`, add/update/remove nodes or edges, `section_ops`) with `base_hash` and lock guards. |
+| `acknowledge_feedback` | Advance agent checkpoints once human edits are reviewed and accepted. |
+| `post_thread_message` | Open an anchored thread (`question`, `change_request`, `decision`, `drift_alert`), reply, or resolve with a 1-line ADR summary. |
+| `get_node_history` | Query full transcripts of resolved Decision threads by `target_id`, `entity_ref`, `view_id`, or text search. |
+| `sync_code_refs` | Link source `code_refs` (`path:symbol`) and update `implemented` / `drifted` status without clobbering unrelated edits. |
 
 ---
 
-## Canvas & Keyboard Controls
+<details id="canvas--keyboard-controls">
+<summary><strong>Canvas &amp; Keyboard Controls</strong></summary>
+
+<br />
 
 | Action | Shortcut / Gesture |
 | :--- | :--- |
@@ -140,9 +232,12 @@ redlinify init --dir /path/to/repo        # Pre-initialize .design/ explicitly
 | Delete selected unlocked elements | `Delete` or `Backspace` |
 | Theme & canvas style | Top-right Sun/Moon (Dark/Light) and Dots/Grid toggles |
 
----
+</details>
 
-## Development & Architecture
+<details id="development--architecture">
+<summary><strong>Development &amp; Monorepo Architecture</strong></summary>
+
+<br />
 
 ```bash
 npm run typecheck   # Type-check all workspace packages in topological order
@@ -150,13 +245,19 @@ npm run build       # Build @redlinify/shared, @redlinify/server, and @redlinify
 npm test            # Run Vitest unit & integration suites
 ```
 
-Monorepo packages:
-
 * `packages/shared` (`@redlinify/shared`): Zod v3 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (`@redlinify/shared/browser` for UI).
-* `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`), stdio MCP server (with workflow `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
+* `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
 * `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
 
-See [SPEC.md](SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for architectural invariants.
+See [SPEC.md](SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for engineering invariants.
+
+</details>
+
+---
+
+## Inspiration
+
+Redlinify was inspired by discovering the **Archify** project and wanting direct, hands-on visual control over the software architecture and database schemas of applications built with AI coding agents—rather than letting structure drift across long text prompts.
 
 ---
 

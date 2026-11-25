@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 460" width="1000" height="460" fill="none" role="img" aria-label="Redlinify 4-stage collaborative core workflow loop">
+  <defs>
+    <linearGradient id="wfLightBg" x1="0" y1="0" x2="1000" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#eef2f7" />
+    </linearGradient>
+    <radialGradient id="wfGlowVioletL" cx="0.12" cy="0.15" r="0.55">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.09" />
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="wfGlowRoseL" cx="0.86" cy="0.82" r="0.55">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#f43f5e" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="wfGlowSkyL" cx="0.85" cy="0.18" r="0.5">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="wfDotsL" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="11" cy="11" r="1.15" fill="#94a3b8" opacity="0.42" />
+    </pattern>
+    <linearGradient id="wfRedWordL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="100%" stop-color="#be123c" />
+    </linearGradient>
+    <linearGradient id="wfEdgeSkyRoseL" x1="372" y1="134" x2="624" y2="134" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="55%" stop-color="#f43f5e" />
+      <stop offset="100%" stop-color="#e11d48" />
+    </linearGradient>
+    <linearGradient id="wfEdgeRoseVioletL" x1="796" y1="208" x2="796" y2="292" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e11d48" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <linearGradient id="wfEdgeRedlineL" x1="628" y1="364" x2="376" y2="364" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="45%" stop-color="#f43f5e" />
+      <stop offset="100%" stop-color="#e11d48" />
+    </linearGradient>
+    <linearGradient id="wfEdgeSyncL" x1="204" y1="296" x2="204" y2="212" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e11d48" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <marker id="wfArrRoseL" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#e11d48" />
+    </marker>
+    <marker id="wfArrVioletL" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#7c3aed" />
+    </marker>
+    <marker id="wfArrSkyL" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path d="M 1 1.5 L 8.5 5 L 1 8.5 z" fill="#0284c7" />
+    </marker>
+  </defs>
+
+  <!-- Crisp Light blueprint tile matching logo theme -->
+  <rect x="4" y="4" width="992" height="452" rx="24" fill="url(#wfLightBg)" stroke="#cbd5e1" stroke-width="2" />
+  <rect x="4" y="4" width="992" height="452" rx="24" fill="url(#wfGlowVioletL)" />
+  <rect x="4" y="4" width="992" height="452" rx="24" fill="url(#wfGlowSkyL)" />
+  <rect x="4" y="4" width="992" height="452" rx="24" fill="url(#wfGlowRoseL)" />
+  <rect x="16" y="16" width="968" height="428" rx="18" fill="url(#wfDotsL)" />
+
+  <!-- Top Header Strip -->
+  <g transform="translate(36, 19) scale(0.24)">
+    <rect x="4" y="4" width="120" height="120" rx="28" fill="#0b1120" stroke="#1e293b" stroke-width="3" />
+    <rect x="20" y="20" width="50" height="38" rx="8" fill="#18143a" stroke="#8b5cf6" stroke-width="4" />
+    <rect x="58" y="70" width="50" height="38" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="4" />
+    <rect x="92" y="76.5" width="10" height="5.5" rx="2.75" fill="#f59e0b" />
+    <path d="M70 39 H80 Q86 39 86 45 V65" stroke="#fb7185" stroke-width="5" stroke-linecap="round" />
+    <circle cx="86" cy="48" r="6" fill="#f43f5e" />
+  </g>
+  <text x="76" y="41" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="20" font-weight="800" letter-spacing="-0.6">
+    <tspan fill="url(#wfRedWordL)">Red</tspan><tspan fill="#0f172a">linify</tspan>
+  </text>
+  <rect x="76" y="45" width="36" height="2.2" rx="1.1" fill="#e11d48" opacity="0.9" />
+  <circle cx="116" cy="46.1" r="1.8" fill="#f43f5e" />
+  <text x="172" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11.5" font-weight="700" letter-spacing="1.4" fill="#64748b">CORE WORKFLOW LOOP</text>
+
+  <!-- Right Legend Pills -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="600">
+    <rect x="586" y="22" width="110" height="24" rx="12" fill="#f5f3ff" stroke="#a78bfa" stroke-width="1.2" />
+    <circle cx="601" cy="34" r="3.5" fill="#7c3aed" />
+    <text x="611" y="38" fill="#5b21b6">Violet Lock</text>
+
+    <rect x="706" y="22" width="136" height="24" rx="12" fill="#fffbeb" stroke="#fbbf24" stroke-width="1.2" />
+    <circle cx="721" cy="34" r="3.5" fill="#d97706" />
+    <text x="731" y="38" fill="#92400e">Amber Question</text>
+
+    <rect x="852" y="22" width="112" height="24" rx="12" fill="#fff1f2" stroke="#fda4af" stroke-width="1.2" />
+    <circle cx="867" cy="34" r="3.5" fill="#e11d48" />
+    <text x="877" y="38" fill="#9f1239">Redline Diff</text>
+  </g>
+
+  <!-- Secondary faint dashed blueprint lines linking all 4 stages to shared .design/ hub -->
+  <path d="M 356 208 V 252 H 394" stroke="#0284c7" stroke-width="1.8" stroke-opacity="0.4" stroke-dasharray="4 4" stroke-linecap="round" />
+  <path d="M 644 208 V 252 H 606" stroke="#0284c7" stroke-width="1.8" stroke-opacity="0.4" stroke-dasharray="4 4" stroke-linecap="round" />
+  <path d="M 356 296 V 252 H 394" stroke="#0284c7" stroke-width="1.8" stroke-opacity="0.4" stroke-dasharray="4 4" stroke-linecap="round" />
+  <path d="M 644 296 V 252 H 606" stroke="#0284c7" stroke-width="1.8" stroke-opacity="0.4" stroke-dasharray="4 4" stroke-linecap="round" />
+
+  <!-- CENTER HUB: .design/ Git Truth -->
+  <rect x="396" y="210" width="208" height="84" rx="14" fill="#ffffff" stroke="#10b981" stroke-width="1.6" />
+  <rect x="442" y="199" width="116" height="20" rx="10" fill="#d1fae5" stroke="#34d399" stroke-width="1.1" />
+  <text x="500" y="212.5" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" font-weight="700" fill="#065f46">.design/ Git Truth</text>
+  <text x="500" y="242" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.5" font-weight="600" fill="#0f172a">views/*.json · threads/*.json</text>
+  <text x="500" y="261" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" fill="#475569">Zero pixel x/y coords or zoom</text>
+  <text x="500" y="280" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#64748b">gitignored: .layout/ · .checkpoint/</text>
+
+  <!-- CARD 01 (Top-Left): Agent Drafts & Asks -->
+  <rect x="36" y="72" width="336" height="136" rx="14" fill="#ffffff" stroke="#0284c7" stroke-width="2" />
+  <rect x="36" y="72" width="336" height="36" rx="14" fill="#eff6ff" />
+  <line x1="36" y1="108" x2="372" y2="108" stroke="#dbeafe" stroke-width="1" />
+  <circle cx="56" cy="90" r="10" fill="#dbeafe" stroke="#0284c7" stroke-width="1.2" />
+  <text x="56" y="94" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0369a1">01</text>
+  <text x="74" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="14" font-weight="700" fill="#0f172a">Agent Drafts &amp; Asks</text>
+  <rect x="276" y="80" width="82" height="20" rx="10" fill="#e0f2fe" stroke="#7dd3fc" stroke-width="1" />
+  <text x="317" y="93.5" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="600" fill="#0369a1">MCP stdio</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" fill="#334155">
+    <circle cx="54" cy="130" r="3" fill="#0284c7" />
+    <text x="66" y="134" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#0f172a">upsert_view() / patch_view()</text>
+    <circle cx="54" cy="156" r="3" fill="#0284c7" />
+    <text x="66" y="160">Auto-starts <tspan font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#0369a1">127.0.0.1:4173</tspan> workbench</text>
+    <circle cx="54" cy="182" r="3" fill="#d97706" />
+    <text x="66" y="186">Pins <tspan fill="#b45309" font-weight="600">amber</tspan> questions &amp; awaits reply</text>
+  </g>
+
+  <!-- CARD 02 (Top-Right): Comment & Model -->
+  <rect x="628" y="72" width="336" height="136" rx="14" fill="#ffffff" stroke="#0284c7" stroke-width="2" />
+  <rect x="628" y="72" width="336" height="36" rx="14" fill="#eff6ff" />
+  <line x1="628" y1="108" x2="964" y2="108" stroke="#dbeafe" stroke-width="1" />
+  <circle cx="648" cy="90" r="10" fill="#dbeafe" stroke="#0284c7" stroke-width="1.2" />
+  <text x="648" y="94" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#0369a1">02</text>
+  <text x="666" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="14" font-weight="700" fill="#0f172a">Comment &amp; Model</text>
+  <rect x="862" y="80" width="88" height="20" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" />
+  <circle cx="874" cy="90" r="3" fill="#d97706" />
+  <text x="912" y="93.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#92400e">Browser UI</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" fill="#334155">
+    <circle cx="646" cy="130" r="3" fill="#d97706" />
+    <text x="658" y="134">Read agent comments &amp; post replies</text>
+    <circle cx="646" cy="156" r="3" fill="#0284c7" />
+    <text x="658" y="160">Add cards, ER fields &amp; drag edge bends</text>
+    <circle cx="646" cy="182" r="3" fill="#e11d48" />
+    <text x="658" y="186">Pin change requests right onto nodes</text>
+  </g>
+
+  <!-- CARD 03 (Bottom-Right): Lock & Record Decisions -->
+  <rect x="628" y="296" width="336" height="136" rx="14" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2.2" />
+  <rect x="628" y="296" width="336" height="36" rx="14" fill="#ede9fe" />
+  <line x1="628" y1="332" x2="964" y2="332" stroke="#ddd6fe" stroke-width="1" />
+  <circle cx="648" cy="314" r="10" fill="#ddd6fe" stroke="#7c3aed" stroke-width="1.2" />
+  <text x="648" y="318" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#5b21b6">03</text>
+  <text x="666" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="14" font-weight="700" fill="#0f172a">Lock &amp; Decide</text>
+  <rect x="876" y="304" width="74" height="20" rx="10" fill="#ddd6fe" stroke="#8b5cf6" stroke-width="1" />
+  <path d="M887 313 V311 A2.2 2.2 0 0 1 891.4 311 V313" stroke="#5b21b6" stroke-width="1.4" stroke-linecap="round" />
+  <rect x="885.5" y="313" width="7.4" height="5.8" rx="1.4" fill="#7c3aed" />
+  <text x="920" y="317.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#4c1d95">Locked</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" fill="#334155">
+    <circle cx="646" cy="354" r="3" fill="#7c3aed" />
+    <text x="658" y="358">Lock approved contracts in <tspan fill="#5b21b6" font-weight="600">violet</tspan></text>
+    <circle cx="646" cy="380" r="3" fill="#7c3aed" />
+    <text x="658" y="384">Agent strictly blocked from overwrites</text>
+    <circle cx="646" cy="406" r="3" fill="#059669" />
+    <text x="658" y="410">Resolved threads → searchable <tspan fill="#0f172a" font-weight="600">Decisions</tspan></text>
+  </g>
+
+  <!-- CARD 04 (Bottom-Left): Semantic Diff & Implement -->
+  <rect x="36" y="296" width="336" height="136" rx="14" fill="#ffffff" stroke="#e11d48" stroke-width="2" />
+  <rect x="36" y="296" width="336" height="36" rx="14" fill="#fff1f2" />
+  <line x1="36" y1="332" x2="372" y2="332" stroke="#ffe4e6" stroke-width="1" />
+  <circle cx="56" cy="314" r="10" fill="#ffe4e6" stroke="#e11d48" stroke-width="1.2" />
+  <text x="56" y="318" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#9f1239">04</text>
+  <text x="74" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="14" font-weight="700" fill="#0f172a">Semantic Diff &amp; Code</text>
+  <rect x="272" y="304" width="86" height="20" rx="10" fill="#ffe4e6" stroke="#fb7185" stroke-width="1" />
+  <text x="315" y="317.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#9f1239">Zero Bloat</text>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" fill="#334155">
+    <circle cx="54" cy="354" r="3" fill="#e11d48" />
+    <text x="66" y="358"><tspan font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.8" fill="#be123c">get_pending_feedback()</tspan> → delta only</text>
+    <circle cx="54" cy="380" r="3" fill="#059669" />
+    <text x="66" y="384">Builds code &amp; schema from clean graph</text>
+    <circle cx="54" cy="406" r="3" fill="#0284c7" />
+    <text x="66" y="410"><tspan font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10.8" fill="#0369a1">sync_code_refs()</tspan> links files to nodes</text>
+  </g>
+
+  <!-- CLOCKWISE LOGO-THEMED ORTHOGONAL REDLINE CONNECTORS + BEND DOTS -->
+  <!-- 1. Top: 01 -> 02 -->
+  <path d="M 372 134 H 621" stroke="url(#wfEdgeSkyRoseL)" stroke-width="2.8" stroke-linecap="round" marker-end="url(#wfArrRoseL)" />
+  <rect x="440" y="121" width="126" height="26" rx="13" fill="#ffffff" stroke="#fb7185" stroke-width="1.4" />
+  <text x="503" y="138" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="700" fill="#0f172a">Live WebSocket</text>
+  <circle cx="404" cy="134" r="5" fill="#e11d48" stroke="#ffffff" stroke-width="2" />
+  <circle cx="404" cy="134" r="2" fill="#ffffff" />
+
+  <!-- 2. Right: 02 -> 03 -->
+  <path d="M 796 208 V 289" stroke="url(#wfEdgeRoseVioletL)" stroke-width="2.8" stroke-linecap="round" marker-end="url(#wfArrVioletL)" />
+  <rect x="730" y="242" width="132" height="26" rx="13" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.4" />
+  <text x="796" y="259" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="700" fill="#4c1d95">Approve &amp; Lock</text>
+  <circle cx="796" cy="224" r="5" fill="#e11d48" stroke="#ffffff" stroke-width="2" />
+  <circle cx="796" cy="224" r="2" fill="#ffffff" />
+
+  <!-- 3. Bottom: 03 -> 04 (Signature Redline Return Loop) -->
+  <path d="M 628 364 H 379" stroke="url(#wfEdgeRedlineL)" stroke-width="3" stroke-linecap="round" marker-end="url(#wfArrRoseL)" />
+  <rect x="415" y="350" width="170" height="28" rx="14" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5" />
+  <text x="500" y="368" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11.5" font-weight="700" fill="#9f1239">Compact Semantic Diff</text>
+  <circle cx="604" cy="364" r="5" fill="#e11d48" stroke="#ffffff" stroke-width="2" />
+  <circle cx="604" cy="364" r="2" fill="#ffffff" />
+
+  <!-- 4. Left: 04 -> 01 -->
+  <path d="M 204 296 V 215" stroke="url(#wfEdgeSyncL)" stroke-width="2.8" stroke-linecap="round" marker-end="url(#wfArrSkyL)" />
+  <rect x="130" y="236" width="148" height="26" rx="13" fill="#ffffff" stroke="#0284c7" stroke-width="1.4" />
+  <text x="204" y="253" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="700" fill="#0369a1">Implement &amp; Sync</text>
+  <circle cx="204" cy="280" r="5" fill="#e11d48" stroke="#ffffff" stroke-width="2" />
+  <circle cx="204" cy="280" r="2" fill="#ffffff" />
+</svg>
