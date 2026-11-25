@@ -262,7 +262,8 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | Bend or split an edge | Select a line and drag its midpoint or segment split handles |
 | Inline edit title / entry / attribute | Double-click text inside an unlocked card (clear text + `Enter` deletes entries & ER attributes) |
 | Cycle tabs | `Tab` / `Shift+Tab` |
-| Quick search / jump | `Ctrl+K` / `Cmd+K` or `/` (fuzzy-search views, boxes, attributes, edges & threads) |
+| Quick search / jump | `Ctrl+K` / `Cmd+K` or `/` (typo-tolerant fuzzy search across views, boxes, attributes, edges & threads) |
+| Export active diagram | Top-right `Export` button (`PNG 2× HD`, `SVG`, `Mermaid .mmd`, `Copy Mermaid`, `JSON`) |
 | Quick actions menu | Right-click canvas, tab, card, or edge |
 | Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
 | Delete selected unlocked elements | `Delete` or `Backspace` |
@@ -282,7 +283,7 @@ npm test            # Run Vitest unit & integration suites
 ```
 
 * `packages/shared` (`@redlinify/shared`): Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (`@redlinify/shared/browser` for UI).
-* `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
+* `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`, `update`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
 * `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
 
 See [SPEC.md](SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for engineering invariants.

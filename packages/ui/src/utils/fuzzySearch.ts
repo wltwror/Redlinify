@@ -51,8 +51,175 @@ function isBoundary(text: string, idx: number): boolean {
 }
 
 /**
- * Case-insensitive ordered subsequence fuzzy matcher that rewards exact,
- * prefix, word/camelCase-boundary, and contiguous character matches.
+ * Restricted Damerau-Levenshtein (Optimal String Alignment) edit distance
+ * with early cutoff when every row cell exceeds `maxDist`.
+ */
+function damerauLevenshtein(a: string, b: string, maxDist: number): number {
+  const lenA = a.length;
+  const lenB = b.length;
+  if (Math.abs(lenA - lenB) > maxDist) return maxDist + 1;
+  if (lenA === 0) return lenB;
+  if (lenB === 0) return lenA;
+
+  let prevPrev = new Array<number>(lenB + 1).fill(0);
+  let prev = Array.from({ length: lenB + 1 }, (_, j) => j);
+
+  for (let i = 1; i <= lenA; i += 1) {
+    const curr = new Array<number>(lenB + 1).fill(maxDist + 1);
+    curr[0] = i;
+    let rowMin = i;
+    const chA = a[i - 1]!;
+
+    for (let j = 1; j <= lenB; j += 1) {
+      const chB = b[j - 1]!;
+      const cost = chA === chB ? 0 : 1;
+      let val = Math.min(
+        prev[j]! + 1,
+        curr[j - 1]! + 1,
+        prev[j - 1]! + cost,
+      );
+      if (i > 1 && j > 1 && chA === b[j - 2] && a[i - 2] === chB) {
+        val = Math.min(val, prevPrev[j - 2]! + cost);
+      }
+      curr[j] = val;
+      if (val < rowMin) rowMin = val;
+    }
+
+    if (rowMin > maxDist) return maxDist + 1;
+    prevPrev = prev;
+    prev = curr;
+  }
+
+  return prev[lenB]!;
+}
+
+function maxEditsForToken(len: number): number {
+  if (len <= 2) return 0;
+  if (len <= 5) return 1;
+  if (len <= 9) return 2;
+  return 3;
+}
+
+function extractWordSpans(
+  text: string,
+): Array<{ word: string; start: number; end: number }> {
+  const spans: Array<{ word: string; start: number; end: number }> = [];
+  let start = -1;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]!;
+    const isDelim = " _-.:/→()[]".includes(ch);
+    if (isDelim) {
+      if (start !== -1) {
+        spans.push({
+          word: text.slice(start, i).toLowerCase(),
+          start,
+          end: i,
+        });
+        start = -1;
+      }
+      continue;
+    }
+    const prev = i > 0 ? text[i - 1]! : "";
+    const camelSplit =
+      start !== -1 &&
+      prev >= "a" &&
+      prev <= "z" &&
+      ch >= "A" &&
+      ch <= "Z";
+    if (camelSplit) {
+      spans.push({
+        word: text.slice(start, i).toLowerCase(),
+        start,
+        end: i,
+      });
+      start = i;
+    } else if (start === -1) {
+      start = i;
+    }
+  }
+  if (start !== -1) {
+    spans.push({
+      word: text.slice(start).toLowerCase(),
+      start,
+      end: text.length,
+    });
+  }
+  return spans;
+}
+
+function matchWithTypoTolerance(
+  qLower: string,
+  text: string,
+): { score: number; indices: number[] } | null {
+  const maxDist = maxEditsForToken(qLower.length);
+  if (maxDist === 0) return null;
+
+  const baseSpans = extractWordSpans(text);
+  const candidates: Array<{ cand: string; start: number; end: number; compound?: boolean }> = [];
+
+  for (let i = 0; i < baseSpans.length; i += 1) {
+    const s = baseSpans[i]!;
+    candidates.push({ cand: s.word, start: s.start, end: s.end });
+    if (s.word.length >= qLower.length + 2 && qLower.length >= 4) {
+      const prefLen = Math.min(s.word.length, qLower.length);
+      candidates.push({
+        cand: s.word.slice(0, prefLen),
+        start: s.start,
+        end: s.start + prefLen,
+      });
+      if (prefLen + 1 <= s.word.length) {
+        candidates.push({
+          cand: s.word.slice(0, prefLen + 1),
+          start: s.start,
+          end: s.start + prefLen + 1,
+        });
+      }
+    }
+    if (i + 1 < baseSpans.length) {
+      const next = baseSpans[i + 1]!;
+      candidates.push({
+        cand: `${s.word}${next.word}`,
+        start: s.start,
+        end: next.end,
+        compound: true,
+      });
+    }
+  }
+
+  let bestScore = -Infinity;
+  let bestSpan: { start: number; end: number } | null = null;
+
+  for (const item of candidates) {
+    if (item.cand.length < 2) continue;
+    const allowed = Math.min(
+      maxDist,
+      Math.max(1, Math.floor((Math.max(qLower.length, item.cand.length) - 1) / 2)),
+    );
+    const dist = damerauLevenshtein(qLower, item.cand, allowed);
+    if (dist > allowed) continue;
+
+    const boundaryBonus = item.start === 0 ? 12 : 4;
+    const compoundPenalty = item.compound ? 4 : 0;
+    const score =
+      96 - dist * 24 + boundaryBonus - compoundPenalty - item.start * 0.1 - text.length * 0.04;
+    if (score > bestScore) {
+      bestScore = score;
+      bestSpan = { start: item.start, end: item.end };
+    }
+  }
+
+  if (!bestSpan || bestScore <= 0) return null;
+  const indices: number[] = [];
+  for (let idx = bestSpan.start; idx < bestSpan.end; idx += 1) {
+    indices.push(idx);
+  }
+  return { score: bestScore, indices };
+}
+
+/**
+ * Case-insensitive fuzzy matcher combining exact/substring/subsequence
+ * matching with typo-tolerant Damerau-Levenshtein fallback.
  */
 export function fuzzyMatch(
   rawQuery: string,
@@ -95,69 +262,72 @@ export function fuzzyMatch(
     };
   }
 
-  // DP over text indices for each query character so skipped gaps choose optimal boundaries
+  // DP over text indices for ordered subsequence matching across camelCase/delimiters
   const qLen = qLower.length;
   const tLen = tLower.length;
-  if (qLen > tLen) return null;
+  if (qLen <= tLen) {
+    let prevRow: Array<{ score: number; indices: number[] } | null> = new Array(
+      tLen,
+    ).fill(null);
 
-  let prevRow: Array<{ score: number; indices: number[] } | null> = new Array(
-    tLen,
-  ).fill(null);
-
-  for (let ti = 0; ti < tLen; ti += 1) {
-    if (tLower[ti] === qLower[0]) {
-      const bonus =
-        (ti === 0 ? 18 : isBoundary(text, ti) ? 14 : 0) +
-        (text[ti] === query[0] ? 2 : 0) -
-        ti * 0.15;
-      prevRow[ti] = { score: 6 + bonus, indices: [ti] };
-    }
-  }
-
-  for (let qi = 1; qi < qLen; qi += 1) {
-    const currRow: Array<{ score: number; indices: number[] } | null> =
-      new Array(tLen).fill(null);
-    let bestPrevIdx = -1;
-    let bestPrev: { score: number; indices: number[] } | null = null;
-
-    for (let ti = qi; ti < tLen; ti += 1) {
-      const candidatePrev = prevRow[ti - 1];
-      if (
-        candidatePrev &&
-        (!bestPrev ||
-          candidatePrev.score >= bestPrev.score - (ti - 1 - bestPrevIdx) * 0.6)
-      ) {
-        bestPrevIdx = ti - 1;
-        bestPrev = candidatePrev;
-      }
-
-      if (bestPrev && tLower[ti] === qLower[qi]) {
-        const consecutive = bestPrevIdx === ti - 1;
-        const gap = ti - bestPrevIdx - 1;
-        const stepScore =
-          5 +
-          (consecutive ? 16 : isBoundary(text, ti) ? 12 : 0) +
-          (text[ti] === query[qi] ? 2 : 0) -
-          Math.min(12, gap * 0.6);
-        currRow[ti] = {
-          score: bestPrev.score + stepScore,
-          indices: [...bestPrev.indices, ti],
-        };
+    for (let ti = 0; ti < tLen; ti += 1) {
+      if (tLower[ti] === qLower[0]) {
+        const bonus =
+          (ti === 0 ? 18 : isBoundary(text, ti) ? 14 : 0) +
+          (text[ti] === query[0] ? 2 : 0) -
+          ti * 0.15;
+        prevRow[ti] = { score: 6 + bonus, indices: [ti] };
       }
     }
-    prevRow = currRow;
+
+    for (let qi = 1; qi < qLen; qi += 1) {
+      const currRow: Array<{ score: number; indices: number[] } | null> =
+        new Array(tLen).fill(null);
+      let bestPrevIdx = -1;
+      let bestPrev: { score: number; indices: number[] } | null = null;
+
+      for (let ti = qi; ti < tLen; ti += 1) {
+        const candidatePrev = prevRow[ti - 1];
+        if (
+          candidatePrev &&
+          (!bestPrev ||
+            candidatePrev.score >= bestPrev.score - (ti - 1 - bestPrevIdx) * 0.6)
+        ) {
+          bestPrevIdx = ti - 1;
+          bestPrev = candidatePrev;
+        }
+
+        if (bestPrev && tLower[ti] === qLower[qi]) {
+          const consecutive = bestPrevIdx === ti - 1;
+          const gap = ti - bestPrevIdx - 1;
+          const stepScore =
+            5 +
+            (consecutive ? 16 : isBoundary(text, ti) ? 12 : 0) +
+            (text[ti] === query[qi] ? 2 : 0) -
+            Math.min(12, gap * 0.6);
+          currRow[ti] = {
+            score: bestPrev.score + stepScore,
+            indices: [...bestPrev.indices, ti],
+          };
+        }
+      }
+      prevRow = currRow;
+    }
+
+    let winner: { score: number; indices: number[] } | null = null;
+    for (let ti = 0; ti < tLen; ti += 1) {
+      const cell = prevRow[ti];
+      if (!cell) continue;
+      const adjusted = cell.score - text.length * 0.05;
+      if (!winner || adjusted > winner.score) {
+        winner = { score: adjusted, indices: cell.indices };
+      }
+    }
+    if (winner) return winner;
   }
 
-  let winner: { score: number; indices: number[] } | null = null;
-  for (let ti = 0; ti < tLen; ti += 1) {
-    const cell = prevRow[ti];
-    if (!cell) continue;
-    const adjusted = cell.score - text.length * 0.05;
-    if (!winner || adjusted > winner.score) {
-      winner = { score: adjusted, indices: cell.indices };
-    }
-  }
-  return winner;
+  // Tier 2: Typo-tolerant Damerau-Levenshtein match against word tokens & prefixes
+  return matchWithTypoTolerance(qLower, text);
 }
 
 export function buildSearchIndex(params: {

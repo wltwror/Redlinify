@@ -194,3 +194,12 @@ body,
   inset: -9px;
   border-radius: 9999px;
 }
+
+.redlinify-tab-strip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.redlinify-tab-strip::-webkit-scrollbar {
+  display: none;
+}

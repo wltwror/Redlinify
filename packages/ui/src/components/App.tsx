@@ -65,6 +65,14 @@ import {
   insertWaypointAlongEdge,
   type Point,
 } from "../layout/routing";
+import {
+  renderViewToJson,
+  renderViewToMermaid,
+  renderViewToSvg,
+  svgToPngBlob,
+  triggerFileDownload,
+  type ExportFormat,
+} from "../utils/exportDiagram";
 import { buildSearchIndex, type SearchItem } from "../utils/fuzzySearch";
 import { CommandSearchModal } from "./CommandSearchModal";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -2261,6 +2269,80 @@ function WorkbenchInner() {
     [theme],
   );
 
+  const handleExportDiagram = useCallback(
+    async (format: ExportFormat) => {
+      const view = activeViewRef.current;
+      if (!view) return;
+
+      const measured: Record<string, { width?: number; height?: number }> = {};
+      for (const n of rfNodes) {
+        if (n.measured?.width || n.measured?.height) {
+          measured[n.id] = {
+            width: n.measured.width,
+            height: n.measured.height,
+          };
+        }
+      }
+
+      try {
+        if (format === "json") {
+          triggerFileDownload(
+            `${view.id}.json`,
+            renderViewToJson(view),
+            "application/json;charset=utf-8",
+          );
+          showToast(`Exported ${view.id}.json`);
+          return;
+        }
+
+        if (format === "mermaid" || format === "copy_mermaid") {
+          const mmd = renderViewToMermaid(view);
+          if (format === "copy_mermaid") {
+            await navigator.clipboard.writeText(mmd);
+            showToast("Copied Mermaid diagram to clipboard");
+          } else {
+            triggerFileDownload(
+              `${view.id}.mmd`,
+              mmd,
+              "text/plain;charset=utf-8",
+            );
+            showToast(`Exported ${view.id}.mmd`);
+          }
+          return;
+        }
+
+        const { svg, width, height } = renderViewToSvg({
+          view,
+          positions: positionsRef.current,
+          edgeRoutes: edgeRoutesRef.current,
+          measured,
+          theme,
+          bgPattern,
+        });
+
+        if (format === "svg") {
+          triggerFileDownload(
+            `${view.id}.svg`,
+            svg,
+            "image/svg+xml;charset=utf-8",
+          );
+          showToast(`Exported ${view.id}.svg`);
+          return;
+        }
+
+        const pngBlob = await svgToPngBlob(svg, width, height, 2);
+        triggerFileDownload(`${view.id}.png`, pngBlob, "image/png");
+        showToast(`Exported ${view.id}.png (2× HD)`);
+      } catch (err) {
+        showToast(
+          err instanceof Error ? err.message : "Failed to export diagram",
+          "error",
+        );
+      }
+    },
+    [bgPattern, rfNodes, showToast, theme],
+  );
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
       <TabBar
@@ -2312,6 +2394,7 @@ function WorkbenchInner() {
         onToggleDirection={() => void handleToggleDirection()}
         onAddBox={() => void createBoxAtPosition()}
         onAutoLayout={() => void handleAutoLayout()}
+        onExport={(format) => void handleExportDiagram(format)}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={() => void handleUndo()}

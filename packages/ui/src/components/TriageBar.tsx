@@ -1,7 +1,14 @@
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownUp,
   Bell,
   CheckCircle2,
+  ChevronDown,
+  Copy,
+  Download,
+  FileCode2,
+  FileImage,
+  FileJson,
   LayoutGrid,
   Plus,
   Redo2,
@@ -10,6 +17,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { DiagramType, ViewDirection } from "@redlinify/shared/browser";
+import type { ExportFormat } from "../utils/exportDiagram";
 
 export type TriageFilter =
   | "all"
@@ -27,6 +35,7 @@ interface TriageBarProps {
   onToggleDirection: () => void;
   onAddBox: () => void;
   onAutoLayout: () => void;
+  onExport: (format: ExportFormat) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -57,6 +66,7 @@ export function TriageBar({
   onToggleDirection,
   onAddBox,
   onAutoLayout,
+  onExport,
   canUndo,
   canRedo,
   onUndo,
@@ -69,6 +79,31 @@ export function TriageBar({
   onOpenDecisions,
   showOfflineWarning,
 }: TriageBarProps) {
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [exportOpen]);
+
+  const handleExportChoice = (format: ExportFormat) => {
+    setExportOpen(false);
+    onExport(format);
+  };
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
       <div className="flex items-center gap-1 overflow-x-auto">
@@ -146,6 +181,75 @@ export function TriageBar({
               <LayoutGrid className="h-3 w-3 text-slate-400" />
               <span className="hidden sm:inline">Auto-Layout</span>
             </button>
+
+            <div ref={exportRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setExportOpen((v) => !v)}
+                aria-label="Export diagram"
+                aria-expanded={exportOpen}
+                title="Export active diagram as PNG, SVG, Mermaid, or JSON"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/70 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                <Download className="h-3 w-3 text-sky-400" />
+                <span className="hidden sm:inline">Export</span>
+                <ChevronDown className="h-3 w-3 text-slate-400" />
+              </button>
+
+              {exportOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-40 mt-1.5 min-w-[200px] rounded-xl border border-slate-700 bg-slate-900/95 p-1.5 shadow-2xl backdrop-blur-md"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportChoice("png")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800 hover:text-slate-50"
+                  >
+                    <FileImage className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Export PNG (2× HD)</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportChoice("svg")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800 hover:text-slate-50"
+                  >
+                    <FileImage className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Export SVG (Vector)</span>
+                  </button>
+                  <div className="my-1 border-t border-slate-800" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportChoice("mermaid")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800 hover:text-slate-50"
+                  >
+                    <FileCode2 className="h-3.5 w-3.5 text-violet-400" />
+                    <span>Export Mermaid (.mmd)</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportChoice("copy_mermaid")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800 hover:text-slate-50"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Copy Mermaid</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportChoice("json")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800 hover:text-slate-50"
+                  >
+                    <FileJson className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Export JSON (.json)</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
 

@@ -43,6 +43,8 @@ This document captures architectural invariants, conventions, and verification c
    * Preserve existing runtime properties (`{ ...(existing ?? {}), ... }`) and `selected` flags inside functional `setRfNodes((prev) => ...)` / `setRfEdges((prev) => ...)` updaters.
    * Keep `.react-flow__edgelabel-renderer { z-index: 1100 !important; }` above elevated `.react-flow__edge.selected` (`z-index: 1000`) in `index.css` so edge `.react-flow__edge-interaction` paths do not swallow clicks on `<EdgeLabelRenderer>` bend handles.
    * Keep Light/Dark styling on `--rl-*` CSS variable tokens (`tailwind.config.js` + `index.css`), keep `locked` violet vs `needs_input` amber, keep per-view `HistoryEntry` undo/redo covering both semantic views and edge routes/positions, and run interactive Playwright click/drag/undo/theme checks after UI edits.
+9. **Branch & Release Discipline (Post-`v0.2.0`)**:
+   * After `v0.2.0`, do **NOT** push directly to `main`; create feature/fix branches and open pull requests instead.
 
 ---
 

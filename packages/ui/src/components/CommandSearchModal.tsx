@@ -163,7 +163,7 @@ export function CommandSearchModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Jump to view, box, entity, attribute, edge, or thread..."
+            placeholder="Fuzzy search views, boxes, attributes, edges, or threads (typos OK)..."
             aria-label="Search workspace input"
             className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
           />

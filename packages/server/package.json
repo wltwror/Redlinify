@@ -1,6 +1,6 @@
 {
   "name": "@redlinify/server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Redlinify CLI, stdio MCP server with auto-UI launcher, and local HTTP/WebSocket workbench server.",
   "homepage": "https://github.com/wltwror/Redlinify#readme",
   "repository": {
@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@redlinify/shared": "0.1.0",
+    "@redlinify/shared": "0.2.0",
     "chokidar": "^4.0.3",
     "ws": "^8.18.0",
     "zod": "^4.6.7"

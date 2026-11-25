@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Database,
   Grid3x3,
@@ -80,6 +82,63 @@ export function TabBar({
     useState<TabStatusSummary | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  const tabStripRef = useRef<HTMLElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = useCallback(() => {
+    const el = tabStripRef.current;
+    if (!el) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    const el = tabStripRef.current;
+    if (!el) return;
+    updateScrollButtons();
+
+    const onScroll = () => updateScrollButtons();
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("wheel", onWheel, { passive: false });
+
+    const ro = new ResizeObserver(() => updateScrollButtons());
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", onWheel);
+      ro.disconnect();
+    };
+  }, [updateScrollButtons]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => updateScrollButtons());
+    return () => cancelAnimationFrame(id);
+  }, [tabs.length, viewRequests.length, updateScrollButtons]);
+
+  useEffect(() => {
+    if (!activeViewId || !tabStripRef.current) return;
+    const activeEl = tabStripRef.current.querySelector<HTMLElement>(
+      `[data-tab-view-id="${CSS.escape(activeViewId)}"]`,
+    );
+    activeEl?.scrollIntoView({
+      behavior: "smooth",
+      inline: "nearest",
+      block: "nearest",
+    });
+  }, [activeViewId, tabs.length]);
 
   const handleDrop = (targetViewId: string) => {
     if (!draggedId || draggedId === targetViewId) {
@@ -161,7 +220,7 @@ export function TabBar({
 
   return (
     <>
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 overflow-x-auto">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 overflow-hidden">
         <div className="flex shrink-0 items-center gap-2 pr-2 border-r border-slate-800">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30">
             <Layers className="h-3.5 w-3.5" />
@@ -174,115 +233,150 @@ export function TabBar({
           </span>
         </div>
 
-        <nav className="flex items-center gap-1 min-w-0">
-          {tabs.map((tab) => {
-            const active = tab.view_id === activeViewId;
-            const hasBlueDot = tab.has_human_edits || tab.waiting_on_agent > 0;
-            const hasRedDot = tab.drifted_count > 0;
-            const isEr = tab.diagram_type === "er";
+        <div className="flex flex-1 min-w-0 items-center gap-1 overflow-hidden">
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() =>
+                tabStripRef.current?.scrollBy({ left: -220, behavior: "smooth" })
+              }
+              title="Scroll tabs left"
+              aria-label="Scroll tabs left"
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+          )}
 
-            return (
-              <div
-                key={tab.view_id}
-                draggable
-                onDragStart={() => setDraggedId(tab.view_id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleDrop(tab.view_id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setTabMenu({ x: e.clientX, y: e.clientY, tab });
-                }}
-                className={`group flex shrink-0 items-center gap-1 rounded-t-md border-b-2 transition-colors ${
-                  active
-                    ? "bg-slate-950 text-slate-50 border-sky-400"
-                    : "bg-slate-900/40 text-slate-400 border-transparent hover:bg-slate-800/70 hover:text-slate-200"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelectView(tab.view_id)}
-                  title={`${tab.description ?? tab.title} (Right-click for options)`}
-                  className="flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-xs font-medium"
-                >
-                  {isEr && (
-                    <Database className="h-3 w-3 shrink-0 text-emerald-400" />
-                  )}
-                  <span className="truncate max-w-[160px]">{tab.title}</span>
+          <nav
+            ref={tabStripRef}
+            aria-label="Diagram tabs"
+            className="redlinify-tab-strip flex min-w-0 items-center gap-1 overflow-x-auto"
+          >
+            {tabs.map((tab) => {
+              const active = tab.view_id === activeViewId;
+              const hasBlueDot = tab.has_human_edits || tab.waiting_on_agent > 0;
+              const hasRedDot = tab.drifted_count > 0;
+              const isEr = tab.diagram_type === "er";
 
-                  {tab.waiting_on_human > 0 && (
-                    <span
-                      title={`${tab.waiting_on_human} open thread(s) waiting on you`}
-                      className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-amber-300 border border-amber-500/40"
-                    >
-                      {tab.waiting_on_human}
-                    </span>
-                  )}
-
-                  {hasBlueDot && (
-                    <span
-                      title="Unsynced local edits or replies waiting on agent"
-                      className="h-2 w-2 rounded-full bg-sky-400"
-                    />
-                  )}
-
-                  {hasRedDot && (
-                    <span
-                      title={`${tab.drifted_count} drifted node(s)`}
-                      className="h-2 w-2 rounded-full bg-rose-500"
-                    />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setTabMenu({ x: rect.left, y: rect.bottom + 4, tab });
+              return (
+                <div
+                  key={tab.view_id}
+                  data-tab-view-id={tab.view_id}
+                  draggable
+                  onDragStart={() => setDraggedId(tab.view_id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => handleDrop(tab.view_id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setTabMenu({ x: e.clientX, y: e.clientY, tab });
                   }}
-                  className={`mr-1 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-opacity ${
-                    active ? "opacity-80" : "opacity-0 group-hover:opacity-80"
+                  className={`group flex shrink-0 items-center gap-1 rounded-t-md border-b-2 transition-colors ${
+                    active
+                      ? "bg-slate-950 text-slate-50 border-sky-400"
+                      : "bg-slate-900/40 text-slate-400 border-transparent hover:bg-slate-800/70 hover:text-slate-200"
                   }`}
-                  title="Tab options"
-                  aria-label={`Tab options for ${tab.title}`}
                 >
-                  <MoreVertical className="h-3 w-3" />
+                  <button
+                    type="button"
+                    onClick={() => onSelectView(tab.view_id)}
+                    title={`${tab.description ?? tab.title} (Right-click for options)`}
+                    className="flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-xs font-medium"
+                  >
+                    {isEr && (
+                      <Database className="h-3 w-3 shrink-0 text-emerald-400" />
+                    )}
+                    <span className="truncate max-w-[160px]">{tab.title}</span>
+
+                    {tab.waiting_on_human > 0 && (
+                      <span
+                        title={`${tab.waiting_on_human} open thread(s) waiting on you`}
+                        className="inline-flex items-center justify-center rounded-full bg-amber-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-amber-300 border border-amber-500/40"
+                      >
+                        {tab.waiting_on_human}
+                      </span>
+                    )}
+
+                    {hasBlueDot && (
+                      <span
+                        title="Unsynced local edits or replies waiting on agent"
+                        className="h-2 w-2 rounded-full bg-sky-400"
+                      />
+                    )}
+
+                    {hasRedDot && (
+                      <span
+                        title={`${tab.drifted_count} drifted node(s)`}
+                        className="h-2 w-2 rounded-full bg-rose-500"
+                      />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setTabMenu({ x: rect.left, y: rect.bottom + 4, tab });
+                    }}
+                    className={`mr-1 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-opacity ${
+                      active ? "opacity-80" : "opacity-0 group-hover:opacity-80"
+                    }`}
+                    title="Tab options"
+                    aria-label={`Tab options for ${tab.title}`}
+                  >
+                    <MoreVertical className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+
+            {viewRequests.map((req) => (
+              <div
+                key={req.id}
+                title={`Pending agent request: ${req.prompt}`}
+                className="flex shrink-0 items-center gap-1.5 rounded-md border border-dashed border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-400"
+              >
+                <Clock className="h-3 w-3 text-amber-400" />
+                <span className="max-w-[140px] truncate">{req.title}</span>
+                <button
+                  type="button"
+                  onClick={() => onDeleteRequest(req.id)}
+                  className="ml-0.5 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+                  aria-label={`Cancel view request ${req.title}`}
+                >
+                  <X className="h-3 w-3" />
                 </button>
               </div>
-            );
-          })}
+            ))}
+          </nav>
 
-          {viewRequests.map((req) => (
-            <div
-              key={req.id}
-              title={`Pending agent request: ${req.prompt}`}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-dashed border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs text-slate-400"
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() =>
+                tabStripRef.current?.scrollBy({ left: 220, behavior: "smooth" })
+              }
+              title="Scroll tabs right"
+              aria-label="Scroll tabs right"
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
             >
-              <Clock className="h-3 w-3 text-amber-400" />
-              <span className="max-w-[140px] truncate">{req.title}</span>
-              <button
-                type="button"
-                onClick={() => onDeleteRequest(req.id)}
-                className="ml-0.5 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
-                aria-label={`Cancel view request ${req.title}`}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          )}
 
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
+            className="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
             title="Request or create a new view"
             aria-label="Add or request view"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
-        </nav>
+        </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
+        <div className="flex shrink-0 items-center gap-1.5 border-l border-slate-800 pl-2">
           <button
             type="button"
             onClick={onOpenSearch}
