@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="#interactive-demo">Demo</a> ·
+  <a href="#see-it-in-action">Demo</a> ·
   <a href="#how-it-works">How It Works</a> ·
   <a href="#why-redlinify">Features</a> ·
   <a href="#visual-tour">Screenshots</a> ·
@@ -33,11 +33,11 @@
 
 ---
 
-## Interactive Demo
+## See It in Action
 
 <!-- Tip: For GitHub's native HD HTML5 video player, drag docs/media/demo.mp4 into the GitHub web editor on GitHub.com and replace the <img> tag below with the generated https://github.com/user-attachments/assets/... URL -->
 <p align="center">
-  <img src="docs/media/demo.gif" alt="Redlinify interactive walkthrough: animated logo intro, replying to agent comments, pinning change requests & violet locks, manual canvas modeling & edge connections, Crow's foot ER bending with Ctrl+Z, semantic Pending Review diff, Decision Log, and Light + Grid mode" width="900" />
+  <img src="docs/media/demo.gif" alt="Redlinify recorded walkthrough: animated logo intro, replying to agent comments, pinning change requests & violet locks, manual canvas modeling & edge connections, Crow's foot ER bending with Ctrl+Z, semantic Pending Review diff, Decision Log, and Light + Grid mode" width="900" />
 </p>
 
 <p align="center">
@@ -64,6 +64,26 @@ Redlinify runs a closed, Git-native collaboration loop between your coding agent
 | **02 · Comment & Model** | `Browser UI` | Over live WebSockets, you read & reply to agent threads, right-click to add nodes or ER fields, connect edges, and drag bends. |
 | **03 · Lock & Decide** | `Violet Guard` | Lock approved cards and contracts in **violet** so the agent cannot overwrite them; resolved threads graduate to **Decisions**. |
 | **04 · Semantic Diff & Code** | `Zero Bloat` | `get_workspace()` returns only structural changes (`+node`, `~field`, replies), and `sync_code_refs()` links built files back to nodes. |
+
+### What Your Agent Actually Sees
+
+When you say *"sync with my edits on the canvas"*, a single `get_workspace()` call hands your agent structural deltas and open comments — **no screenshots, no `(x, y)` pixels, no re-dumping the whole diagram**:
+
+```json
+{
+  "view_diffs": [{
+    "view_id": "auth-flow",
+    "diff": {
+      "nodes_modified": [{ "id": "auth-api", "changes": { "locked": { "before": false, "after": true } } }],
+      "edges_added": [{ "id": "e-token", "source": "auth-api", "target": "redis-store", "label": "TTL 15m" }]
+    }
+  }],
+  "pending_threads": [{
+    "id": "th-rate-limit", "kind": "change_request", "target_type": "node", "target_id": "auth-api",
+    "messages": [{ "author": "human", "body": "Lock JWT expiry at 15m and add per-IP rate limiting." }]
+  }]
+}
+```
 
 ---
 
@@ -101,6 +121,15 @@ Redlinify runs a closed, Git-native collaboration loop between your coding agent
     </td>
   </tr>
 </table>
+
+<br />
+
+| Approach | Spatial Modeling | Anti-Overwrite Locks | Agent Context Cost | Syncs Back to Code |
+| :--- | :---: | :---: | :---: | :---: |
+| **Linear Chat** | No (walls of prose) | No | High (re-explain context) | Manual |
+| **Mermaid / ASCII** | Read-only diagrams | No | Medium (re-dumps full graph) | Goes stale quickly |
+| **Excalidraw / Miro** | Freehand canvas | Visual-only | Very high (screenshots / raw pixels) | Disconnected |
+| **Redlinify** | **Yes (cards, ER sections, bends)** | **Yes (violet `locked` guard)** | **Minimal (zero-coord semantic diffs)** | **Yes (`code_refs` + drift checks)** |
 
 ---
 
@@ -200,6 +229,8 @@ redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 
 ## MCP Tool Reference (6 Tools)
 
+Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including workflow instructions), with `readOnlyHint` annotations on readers and compact non-echoing write responses.
+
 | Tool | Role | Purpose |
 | :--- | :--- | :--- |
 | `get_workspace` | `Read` | Return tabs (`view_hash`, triage/drifted counts), `entity_ref` slugs, `view_requests`, pending semantic diffs, open threads, and `ui_url` (or launch browser with `open_browser: true`). |
@@ -223,7 +254,7 @@ redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 | Connect two nodes | Drag from any 4-sided handle to another node |
 | Bend or split an edge | Select a line and drag its midpoint or segment split handles |
 | Inline edit title / entry / attribute | Double-click text inside an unlocked card |
-| Quick actions menu | Right-click canvas, tab, card, or edge |
+| Quick actions menu | Right-click canvas, tab, card/section, or edge |
 | Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
 | Delete selected unlocked elements | `Delete` or `Backspace` |
 | Theme & canvas style | Top-right Sun/Moon (Dark/Light) and Dots/Grid toggles |
