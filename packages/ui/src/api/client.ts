@@ -5,6 +5,7 @@ import type {
   SemanticDiff,
   ThreadKind,
   ThreadTargetType,
+  UserPreferences,
   ViewDirection,
   ViewLayout,
   ViewRequest,
@@ -266,6 +267,26 @@ export function fetchCrossLinks(
   return requestJson(
     `/api/cross-links/${encodeURIComponent(entityRef)}`,
   );
+}
+
+export async function fetchPreferences(): Promise<UserPreferences> {
+  const res = await requestJson<{ preferences: UserPreferences }>(
+    "/api/preferences",
+  );
+  return res.preferences;
+}
+
+export async function savePreferences(
+  patch: UserPreferences,
+): Promise<UserPreferences> {
+  const res = await requestJson<{ preferences: UserPreferences }>(
+    "/api/preferences",
+    {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    },
+  );
+  return res.preferences;
 }
 
 export function connectWebSocket(
