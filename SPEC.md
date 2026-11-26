@@ -83,13 +83,14 @@ Redlinify/
 │       │   │   ├── ContextMenu.tsx     # Canvas/node/edge/tab context menu + `Add Entry to…` submenu
 │       │   │   ├── EdgeCreateModal.tsx # Modal for new edges & ER cardinality/relation setup
 │       │   │   └── ErrorBoundary.tsx
-│       │   ├── hooks/                  # Extracted App hooks (sync, history, shortcuts, interactions, context menu, search, export, theme, toast)
+│       │   ├── hooks/                  # Extracted App hooks (sync, history, shortcuts, viewport navigation, interactions, context menu, search, export, theme, toast)
 │       │   ├── layout/
 │       │   │   ├── elk.ts              # Lazy ELKjs auto-layout + incremental .layout/ merge
 │       │   │   └── routing.ts          # 4-sided handle geometry & orthogonal bend waypoint routing
 │       │   └── utils/
 │       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, Mermaid `.mmd` / copy, and JSON export
-│       │       └── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
+│       │       ├── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
+│       │       └── viewportNavigation.ts # Pure Trackpad/Mouse wheel panning & cursor-centered pinch zoom math
 │       └── test/
 └── skill/
     └── SKILL.md                        # Agent workflow instructions
@@ -312,7 +313,8 @@ Build a clean, theme-aware developer workbench hosted at **`http://127.0.0.1:417
      * Auto-lays out nodes according to `view.direction` (`TB` or `LR`) using deterministic estimates + measured dimensions.
      * Applies `.layout/{view_id}.json` manual position overrides only for nodes that have saved positions so adding one node doesn't scramble existing ones, alongside per-edge `edge_routes`.
      * Includes an **"Auto-Layout / Reset Positions"** toolbar button that clears overrides for the active tab.
-   * **Lightweight Inline & Spatial Editing:**
+   * **Lightweight Inline & Spatial Editing & Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`):**
+     * **Trackpad / Mouse Viewport Navigation:** Default Trackpad mode maps 2-finger scroll to responsive 2D canvas panning (`1.55×`), cross-platform pinch / `Ctrl+Scroll` / `Cmd+Scroll` to cursor-centered zoom (plus `Space+Drag`, `Shift+Scroll`, `+`/`-`/`0`/`1`/`Shift+1`, `Arrow`/`Shift+Arrow` pan, and a top-right Trackpad/Mouse toggle). `overscroll-behavior: none` prevents unintended browser swipe-back navigation.
      * Toolbar `+ Add Box` / `+ Add Entity`, multi-select (`Ctrl/Cmd+Click` or `Shift+Drag` marquee), and right-click context menus (dismissed automatically on pan/drag/wheel).
      * Drag from any of 4-sided node handles to create a new edge (`EdgeCreateModal.tsx` for label, step number, style, or ER cardinality/relation kind).
      * Select an edge and drag its midpoint or segment split handles to create orthogonal waypoints persisted in `.layout/{view_id}.json` (`edge_routes`).

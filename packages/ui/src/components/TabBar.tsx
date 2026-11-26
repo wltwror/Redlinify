@@ -10,9 +10,11 @@ import {
   Layers,
   Moon,
   MoreVertical,
+  Mouse,
   Plus,
   Search,
   Sun,
+  Touchpad,
   Trash2,
   X,
 } from "lucide-react";
@@ -22,6 +24,7 @@ import type {
   ViewRequest,
 } from "@redlinify/shared/browser";
 import type { TabStatusSummary } from "../api/client";
+import type { NavigationMode } from "../utils/viewportNavigation";
 import { ContextMenu } from "./ContextMenu";
 
 interface TabBarProps {
@@ -44,6 +47,8 @@ interface TabBarProps {
   onToggleTheme: () => void;
   bgPattern: "dots" | "grid";
   onToggleBgPattern: () => void;
+  navMode: NavigationMode;
+  onToggleNavMode: () => void;
 }
 
 export function TabBar({
@@ -62,6 +67,8 @@ export function TabBar({
   onToggleTheme,
   bgPattern,
   onToggleBgPattern,
+  navMode,
+  onToggleNavMode,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -389,6 +396,24 @@ export function TabBar({
             <kbd className="hidden md:inline rounded border border-slate-700 bg-slate-900 px-1 py-0.2 font-mono text-[10px] text-slate-400">
               Ctrl K
             </kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleNavMode}
+            title={
+              navMode === "trackpad"
+                ? "Trackpad mode: 2-finger pan, pinch or Ctrl+scroll zoom (click for Mouse mode)"
+                : "Mouse mode: scroll wheel zoom, drag or Shift+scroll pan (click for Trackpad mode)"
+            }
+            aria-label="Toggle touchpad or mouse navigation"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-slate-50 transition-colors"
+          >
+            {navMode === "trackpad" ? (
+              <Touchpad className="h-3.5 w-3.5 text-sky-400" />
+            ) : (
+              <Mouse className="h-3.5 w-3.5 text-emerald-400" />
+            )}
           </button>
 
           <button

@@ -126,8 +126,13 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
+  overscroll-behavior: none;
   background-color: rgb(var(--rl-slate-950));
   color: rgb(var(--rl-slate-100));
+}
+
+.react-flow {
+  overscroll-behavior: none;
 }
 
 .react-flow__controls {

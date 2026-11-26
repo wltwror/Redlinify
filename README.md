@@ -272,6 +272,8 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | :--- | :--- |
 | Select element & open inspector | Click a box/entity or relationship line |
 | Multi-select boxes | `Ctrl+Click` / `Cmd+Click` (or `Shift+Drag` marquee) |
+| Pan canvas (Trackpad / Mouse) | 2-finger scroll in Trackpad mode (default), drag canvas or `Space+Drag`, `Shift+Scroll`, or `Arrow` keys (`Shift+Arrow` fast) |
+| Zoom canvas | Pinch / `Ctrl+Scroll` / `Cmd+Scroll` (or scroll wheel in Mouse mode via top-right toggle), `+`/`-`, `1` (100%), `0` or `Shift+1` (Fit View) |
 | Connect two nodes | Drag from any 4-sided handle to another node |
 | Bend or split an edge | Select a line and drag its midpoint or segment split handles |
 | Inline edit title / entry / attribute | Double-click text inside an unlocked card (clear text + `Enter` deletes entries & ER attributes) |
@@ -281,7 +283,7 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | Quick actions menu | Right-click canvas, tab, card, or edge |
 | Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
 | Delete selected unlocked elements | `Delete` or `Backspace` |
-| Theme & canvas style | Top-right Sun/Moon (Dark/Light) and Dots/Grid toggles |
+| Navigation, canvas & theme toggles | Top-right Trackpad/Mouse toggle, Dots/Grid toggle, and Sun/Moon (Dark/Light) toggle |
 
 </details>
 

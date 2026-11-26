@@ -48,8 +48,13 @@ import { useDiagramExport } from "../hooks/useDiagramExport";
 import { useThemePreferences } from "../hooks/useThemePreferences";
 import { useToast } from "../hooks/useToast";
 import { useViewHistory } from "../hooks/useViewHistory";
+import { useViewportNavigation } from "../hooks/useViewportNavigation";
 import { useWorkspaceSearch } from "../hooks/useWorkspaceSearch";
 import { useWorkspaceSync } from "../hooks/useWorkspaceSync";
+import {
+  VIEWPORT_MAX_ZOOM,
+  VIEWPORT_MIN_ZOOM,
+} from "../utils/viewportNavigation";
 import { CommandSearchModal } from "./CommandSearchModal";
 import { ContextMenu } from "./ContextMenu";
 import { EdgeCreateModal } from "./EdgeCreateModal";
@@ -79,10 +84,18 @@ function getModifiedNodeIds(diff: SemanticDiff | null): Set<string> {
 }
 
 function WorkbenchInner() {
-  const { fitView, getViewport, setViewport, setCenter, screenToFlowPosition } =
-    useReactFlow();
+  const {
+    fitView,
+    getViewport,
+    setViewport,
+    setCenter,
+    screenToFlowPosition,
+    zoomIn,
+    zoomOut,
+    zoomTo,
+  } = useReactFlow();
 
-  const { theme, bgPattern, toggleTheme, toggleBgPattern } =
+  const { theme, bgPattern, navMode, toggleTheme, toggleBgPattern, toggleNavMode } =
     useThemePreferences();
   const { toast, showToast } = useToast();
 
@@ -100,6 +113,7 @@ function WorkbenchInner() {
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
 
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
   const viewportReadyRef = useRef(false);
@@ -506,6 +520,28 @@ function WorkbenchInner() {
     handleJumpToTarget,
   });
 
+  const {
+    panViewportBy,
+    handleZoomIn,
+    handleZoomOut,
+    handleFitView,
+    handleResetZoom,
+  } = useViewportNavigation({
+    containerRef: canvasContainerRef,
+    activeViewIdRef,
+    positionsRef,
+    edgeRoutesRef,
+    viewportReadyRef,
+    navMode,
+    getViewport,
+    setViewport,
+    fitView,
+    zoomIn,
+    zoomOut,
+    zoomTo,
+    clearContextMenu,
+  });
+
   useCanvasShortcuts({
     activeViewIdRef,
     tabs,
@@ -517,6 +553,11 @@ function WorkbenchInner() {
     handleSelectView,
     handleUndo,
     handleRedo,
+    panViewportBy,
+    handleZoomIn,
+    handleZoomOut,
+    handleFitView,
+    handleResetZoom,
   });
 
   const { handleExportDiagram } = useDiagramExport({
@@ -840,6 +881,8 @@ function WorkbenchInner() {
         onToggleTheme={toggleTheme}
         bgPattern={bgPattern}
         onToggleBgPattern={toggleBgPattern}
+        navMode={navMode}
+        onToggleNavMode={toggleNavMode}
       />
 
       <TriageBar
@@ -896,7 +939,10 @@ function WorkbenchInner() {
       )}
 
       <div className="relative flex flex-1 min-h-0">
-        <div className="relative flex-1 min-w-0 min-h-0">
+        <div
+          ref={canvasContainerRef}
+          className="relative flex-1 min-w-0 min-h-0"
+        >
           {!activeView ? (
             <div className="flex h-full flex-col items-center justify-center p-6 text-center text-slate-400">
               <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
@@ -922,6 +968,11 @@ function WorkbenchInner() {
               elevateEdgesOnSelect
               multiSelectionKeyCode={MULTI_SELECTION_KEY_CODE}
               selectionKeyCode="Shift"
+              panActivationKeyCode="Space"
+              zoomOnDoubleClick={false}
+              zoomOnScroll={false}
+              panOnScroll={false}
+              nodeDragThreshold={3}
               onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeDragStart={handleDragStart}
@@ -941,8 +992,8 @@ function WorkbenchInner() {
               onNodeContextMenu={handleNodeContextMenu}
               onEdgeContextMenu={handleEdgeContextMenu}
               deleteKeyCode={DELETE_KEY_CODE}
-              minZoom={0.2}
-              maxZoom={2}
+              minZoom={VIEWPORT_MIN_ZOOM}
+              maxZoom={VIEWPORT_MAX_ZOOM}
               proOptions={PRO_OPTIONS}
             >
               <Background
