@@ -218,6 +218,44 @@ async function dispatchWheel(
   );
 }
 
+async function assertAllNodesInViewport(page, label) {
+  const result = await page.evaluate(() => {
+    const container = document.querySelector(".react-flow");
+    const paneRect = container.getBoundingClientRect();
+    const nodes = [...document.querySelectorAll(".react-flow__node")];
+    const outside = [];
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (
+        r.width === 0 ||
+        r.height === 0 ||
+        r.left < paneRect.left - 8 ||
+        r.top < paneRect.top - 8 ||
+        r.right > paneRect.right + 8 ||
+        r.bottom > paneRect.bottom + 8
+      ) {
+        outside.push({
+          id: n.getAttribute("data-id"),
+          nodeRect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+          paneRect: {
+            left: paneRect.left,
+            top: paneRect.top,
+            right: paneRect.right,
+            bottom: paneRect.bottom,
+          },
+        });
+      }
+    }
+    return { count: nodes.length, outside };
+  });
+  assert.ok(result.count > 0, `${label}: expected nodes in viewport`);
+  assert.deepEqual(
+    result.outside,
+    [],
+    `${label}: nodes outside viewport: ${JSON.stringify(result.outside)}`,
+  );
+}
+
 async function main() {
   const tmpRepo = await buildTempRepo();
   const prefsPath = path.join(tmpRepo, "preferences.json");
@@ -639,8 +677,102 @@ async function main() {
     );
     console.log("PASS 5: General view shapes (decision, store, terminal) and undo verified.");
 
+    // 9. LR/TB direction toggle centers viewport on updated ELK layout + no '+1 more' card collapse
+    await canvasDock.getByRole("button", { name: "Undo" }).click();
+    await page.waitForTimeout(250);
+    await dispatchWheel(page, 1800, 1200);
+    await page.waitForTimeout(120);
+
+    const toggleDirBtn = canvasDock.getByRole("button", {
+      name: /^Toggle layout direction/,
+    });
+    const dirBefore = await toggleDirBtn.textContent();
+    await toggleDirBtn.click();
+    await page.waitForFunction(
+      (prev) => {
+        const btn = document.querySelector(
+          '[aria-label="Canvas actions"] button[aria-label^="Toggle layout direction"]',
+        );
+        return btn && btn.textContent?.trim() !== prev?.trim();
+      },
+      dirBefore,
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(450);
+    await assertAllNodesInViewport(page, "After first LR/TB toggle");
+
+    const dirMid = await toggleDirBtn.textContent();
+    await toggleDirBtn.click();
+    await page.waitForFunction(
+      (prev) => {
+        const btn = document.querySelector(
+          '[aria-label="Canvas actions"] button[aria-label^="Toggle layout direction"]',
+        );
+        return btn && btn.textContent?.trim() !== prev?.trim();
+      },
+      dirMid,
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(450);
+    await assertAllNodesInViewport(page, "After second LR/TB toggle");
+
+    const countBeforeCollapseBox = await page.locator(".react-flow__node").count();
+    await canvasDock.getByRole("button", { name: "Add Box" }).click();
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll(".react-flow__node").length === expected,
+      countBeforeCollapseBox + 1,
+      { timeout: 5000 },
+    );
+    await page.waitForSelector(
+      '.react-flow__node.selected [data-section-id="responsibilities"]',
+      { timeout: 5000 },
+    );
+    const collapseNodeId = await page
+      .locator(".react-flow__node.selected")
+      .first()
+      .getAttribute("data-id");
+    assert.ok(collapseNodeId, "Expected selected node data-id");
+    await page.locator(".react-flow__controls-fitview").first().click();
+    await page.waitForTimeout(250);
+
+    const collapseNode = page.locator(`.react-flow__node[data-id="${collapseNodeId}"]`);
+    for (let i = 2; i <= 6; i++) {
+      await collapseNode.hover();
+      const addLineBtn = collapseNode.locator('button[title^="Add line to "]').first();
+      await addLineBtn.click({ force: true });
+      const entryInput = collapseNode.locator('input[placeholder="New entry..."]');
+      await entryInput.waitFor({ state: "visible", timeout: 4000 });
+      await entryInput.fill(`step_${i}`);
+      await entryInput.press("Enter");
+      await collapseNode.getByText(`step_${i}`).waitFor({
+        state: "visible",
+        timeout: 4000,
+      });
+    }
+    assert.equal(await collapseNode.getByText("step_6").isVisible(), true);
+    assert.equal(
+      await collapseNode.getByRole("button", { name: "+1 more" }).count(),
+      0,
+    );
+
+    await collapseNode.hover();
+    await collapseNode
+      .locator('button[title^="Add line to "]')
+      .first()
+      .click({ force: true });
+    const entry7Input = collapseNode.locator('input[placeholder="New entry..."]');
+    await entry7Input.waitFor({ state: "visible", timeout: 4000 });
+    await entry7Input.fill("step_7");
+    await entry7Input.press("Enter");
+    await collapseNode.getByRole("button", { name: "+2 more" }).waitFor({
+      state: "visible",
+      timeout: 5000,
+    });
+    assert.equal(await collapseNode.getByText("step_7").count(), 0);
+    console.log("PASS 6: Direction toggle fitView centering and non-redundant collapse UX verified.");
+
     assert.deepEqual(errors, [], `Browser errors: ${errors.join("; ")}`);
-    console.log("PASS 6: Zero console/page errors.");
+    console.log("PASS 7: Zero console/page errors.");
   } catch (err) {
     console.error("E2E FAILED. UI server logs:\n", serverLogs);
     throw err;

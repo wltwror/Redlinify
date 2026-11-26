@@ -23,6 +23,16 @@ function getElk(): Promise<ElkInstance> {
 export const MAX_VISIBLE_SECTION_ITEMS = 5;
 export const MAX_VISIBLE_ER_FIELDS = 8;
 
+export function getCollapsedVisibleCount(
+  totalCount: number,
+  maxVisible: number,
+): { visibleCount: number; hiddenCount: number } {
+  if (totalCount <= maxVisible + 1) {
+    return { visibleCount: totalCount, hiddenCount: 0 };
+  }
+  return { visibleCount: maxVisible, hiddenCount: totalCount - maxVisible };
+}
+
 export function getEffectiveNodeShape(
   node: DesignNode,
   diagramType: DiagramType = "general",
@@ -98,11 +108,19 @@ export function estimateNodeSize(
   let longestLine = node.title.length + node.kind.length + 6;
   for (const section of node.sections) {
     longestLine = Math.max(longestLine, section.heading.length + 4);
-    for (const item of section.items.slice(0, MAX_VISIBLE_SECTION_ITEMS)) {
+    const { visibleCount } = getCollapsedVisibleCount(
+      section.items.length,
+      MAX_VISIBLE_SECTION_ITEMS,
+    );
+    for (const item of section.items.slice(0, visibleCount)) {
       longestLine = Math.max(longestLine, item.length);
     }
   }
-  for (const field of (node.fields ?? []).slice(0, MAX_VISIBLE_ER_FIELDS)) {
+  const { visibleCount: widthFieldCount } = getCollapsedVisibleCount(
+    (node.fields ?? []).length,
+    MAX_VISIBLE_ER_FIELDS,
+  );
+  for (const field of (node.fields ?? []).slice(0, widthFieldCount)) {
     const lineLen =
       field.name.length + (field.type ? field.type.length + 2 : 0) + 10;
     longestLine = Math.max(longestLine, lineLen);
@@ -117,15 +135,19 @@ export function estimateNodeSize(
 
   const fields = node.fields ?? [];
   if (diagramType === "er" || fields.length > 0) {
-    const visibleFields = Math.min(fields.length, MAX_VISIBLE_ER_FIELDS);
-    const hasMoreFields = fields.length > MAX_VISIBLE_ER_FIELDS ? 22 : 0;
+    const { visibleCount: visibleFields, hiddenCount: hiddenFields } =
+      getCollapsedVisibleCount(fields.length, MAX_VISIBLE_ER_FIELDS);
+    const hasMoreFields = hiddenFields > 0 ? 22 : 0;
     const emptyHint = fields.length === 0 ? 22 : 0;
     height += 26 + visibleFields * 24 + hasMoreFields + emptyHint + 16;
   }
 
   for (const section of node.sections) {
-    const visibleCount = Math.min(section.items.length, MAX_VISIBLE_SECTION_ITEMS);
-    const hasMore = section.items.length > MAX_VISIBLE_SECTION_ITEMS ? 22 : 0;
+    const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+      section.items.length,
+      MAX_VISIBLE_SECTION_ITEMS,
+    );
+    const hasMore = hiddenCount > 0 ? 22 : 0;
     const emptyHint = section.items.length === 0 ? 18 : 0;
     height += 26 + visibleCount * 20 + hasMore + emptyHint + 10;
   }

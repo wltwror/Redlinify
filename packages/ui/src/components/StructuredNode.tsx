@@ -21,6 +21,7 @@ import type {
 import {
   MAX_VISIBLE_ER_FIELDS,
   MAX_VISIBLE_SECTION_ITEMS,
+  getCollapsedVisibleCount,
   getEffectiveNodeShape,
 } from "../layout/elk";
 
@@ -150,10 +151,11 @@ function StructuredNodeComponent({
   const isErMode = diagramType === "er" || (node.fields && node.fields.length > 0);
   const effectiveShape = getEffectiveNodeShape(node, diagramType);
   const fields = node.fields ?? [];
+  const { visibleCount: collapsedFieldsCount, hiddenCount: hiddenFieldsCount } =
+    getCollapsedVisibleCount(fields.length, MAX_VISIBLE_ER_FIELDS);
   const visibleFields = fieldsExpanded
     ? fields
-    : fields.slice(0, MAX_VISIBLE_ER_FIELDS);
-  const hiddenFieldsCount = Math.max(0, fields.length - MAX_VISIBLE_ER_FIELDS);
+    : fields.slice(0, collapsedFieldsCount);
 
   let cardBorder = "border-slate-700/90";
   if (selected) {
@@ -677,13 +679,13 @@ function StructuredNodeComponent({
         <div className="divide-y divide-slate-800 border-t border-slate-800">
           {node.sections.map((section) => {
             const isExpanded = expandedSections[section.id] === true;
+            const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+              section.items.length,
+              MAX_VISIBLE_SECTION_ITEMS,
+            );
             const visibleItems = isExpanded
               ? section.items
-              : section.items.slice(0, MAX_VISIBLE_SECTION_ITEMS);
-            const hiddenCount = Math.max(
-              0,
-              section.items.length - MAX_VISIBLE_SECTION_ITEMS,
-            );
+              : section.items.slice(0, visibleCount);
 
             return (
               <div
