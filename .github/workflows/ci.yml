@@ -36,6 +36,9 @@ jobs:
       - name: Run unit & integration tests
         run: npm test
 
+      - name: Verify npm package pack & standalone CLI
+        run: npm run test:npm-pack
+
   e2e:
     name: Playwright E2E (ubuntu-latest)
     runs-on: ubuntu-latest

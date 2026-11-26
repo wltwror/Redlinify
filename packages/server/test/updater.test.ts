@@ -159,4 +159,40 @@ describe("Redlinify self-updater", () => {
       runSelfUpdate({ installRoot: plainDir, checkOnly: true }),
     ).rejects.toThrow(/not a Git clone/i);
   });
+
+  it("refuses npm/npx node_modules installs cleanly and directs users to npm update", async () => {
+    const fakeWorkspace = await fs.mkdtemp(
+      path.join(os.tmpdir(), "redlinify-npm-install-"),
+    );
+    cleanups.push(async () => {
+      await fs.rm(fakeWorkspace, { recursive: true, force: true });
+    });
+
+    // Even inside a workspace whose root package.json is named "redlinify",
+    // an installed CLI inside node_modules/redlinify/dist/cli.js must not resolve as a git clone.
+    await fs.writeFile(
+      path.join(fakeWorkspace, "package.json"),
+      JSON.stringify({ name: "redlinify", version: "0.2.1" }),
+      "utf8",
+    );
+    const fakeCli = path.join(
+      fakeWorkspace,
+      "node_modules",
+      "redlinify",
+      "dist",
+      "cli.js",
+    );
+    await fs.mkdir(path.dirname(fakeCli), { recursive: true });
+    await fs.writeFile(fakeCli, "#!/usr/bin/env node\n", "utf8");
+    await fs.writeFile(
+      path.join(fakeWorkspace, "node_modules", "redlinify", "package.json"),
+      JSON.stringify({ name: "redlinify", version: "0.2.1" }),
+      "utf8",
+    );
+
+    expect(resolveInstallRoot(fakeCli)).toBeNull();
+    await expect(
+      runSelfUpdate({ cliEntryPath: fakeCli, checkOnly: true }),
+    ).rejects.toThrow(/npm install -g redlinify@latest/);
+  });
 });
