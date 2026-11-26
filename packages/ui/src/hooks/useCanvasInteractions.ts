@@ -13,6 +13,7 @@ import type {
   EdgeRoute,
   EntityField,
   HandleSide,
+  NodeShape,
   RelationKind,
   ViewDirection,
 } from "@redlinify/shared/browser";
@@ -349,8 +350,36 @@ export function useCanvasInteractions({
     ],
   );
 
+  const handleChangeNodeShape = useCallback(
+    async (nodeId: string, nextShape: NodeShape) => {
+      const curr = activeViewRef.current;
+      if (!curr || curr.diagram_type === "er") return;
+      const target = curr.nodes.find((n) => n.id === nodeId);
+      if (!target) return;
+      if (target.locked) {
+        showToast("Locked node cannot change shape", "warning");
+        return;
+      }
+      if ((target.shape ?? "card") === nextShape) return;
+
+      await persistView({
+        ...curr,
+        nodes: curr.nodes.map((n) => {
+          if (n.id !== nodeId) return n;
+          if (nextShape === "card") {
+            const copy = { ...n };
+            delete copy.shape;
+            return copy;
+          }
+          return { ...n, shape: nextShape };
+        }),
+      });
+    },
+    [activeViewRef, persistView, showToast],
+  );
+
   const createBoxAtPosition = useCallback(
-    async (flowPos?: Point) => {
+    async (flowPos?: Point, shape: NodeShape = "card") => {
       if (!activeView) return;
       const suffix = Date.now().toString(36).slice(-4);
       const isEr = activeView.diagram_type === "er";
@@ -389,20 +418,56 @@ export function useCanvasInteractions({
               },
             ],
           }
-        : {
-            id,
-            kind: "Component",
-            title: "New Component",
-            status: "draft",
-            locked: false,
-            sections: [
-              {
-                id: "responsibilities",
-                heading: "Responsibilities",
-                items: ["describe behavior"],
-              },
-            ],
-          };
+        : shape === "decision"
+          ? {
+              id,
+              kind: "Decision",
+              shape: "decision",
+              title: "Decision?",
+              status: "draft",
+              locked: false,
+              sections: [],
+            }
+          : shape === "terminal"
+            ? {
+                id,
+                kind: "Terminal",
+                shape: "terminal",
+                title: "Start / End",
+                status: "draft",
+                locked: false,
+                sections: [],
+              }
+            : shape === "store"
+              ? {
+                  id,
+                  kind: "Store",
+                  shape: "store",
+                  title: "Data Store",
+                  status: "draft",
+                  locked: false,
+                  sections: [
+                    {
+                      id: "schema",
+                      heading: "Schema / Keys",
+                      items: ["define data"],
+                    },
+                  ],
+                }
+              : {
+                  id,
+                  kind: "Component",
+                  title: "New Component",
+                  status: "draft",
+                  locked: false,
+                  sections: [
+                    {
+                      id: "responsibilities",
+                      heading: "Responsibilities",
+                      items: ["describe behavior"],
+                    },
+                  ],
+                };
 
       const nextView: DesignView = {
         ...activeView,
@@ -869,6 +934,7 @@ export function useCanvasInteractions({
 
   return {
     handleToggleLock,
+    handleChangeNodeShape,
     handleInlineUpdateTitle,
     handleInlineUpdateItem,
     handleInlineAddItem,

@@ -249,4 +249,28 @@ describe("lock guards & view patching", () => {
       }),
     ).toThrow(ValidationError);
   });
+
+  it("protects shape on locked nodes and normalizes 'card' to omitted in applyViewPatch", () => {
+    const existing = makeLockedView();
+    const withShapeChange = structuredClone(existing);
+    withShapeChange.nodes[0]!.shape = "decision";
+
+    const violations = checkLockViolations(existing, withShapeChange);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.fields).toContain("shape");
+
+    const explicitCard = structuredClone(existing);
+    explicitCard.nodes[0]!.shape = "card";
+    expect(checkLockViolations(existing, explicitCard)).toEqual([]);
+
+    const asStore = applyViewPatch(existing, {
+      update_nodes: [{ id: "token_store", shape: "store" }],
+    });
+    expect(asStore.nodes[1]?.shape).toBe("store");
+
+    const resetCard = applyViewPatch(asStore, {
+      update_nodes: [{ id: "token_store", shape: "card" }],
+    });
+    expect(resetCard.nodes[1]?.shape).toBeUndefined();
+  });
 });

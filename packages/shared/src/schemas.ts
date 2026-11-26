@@ -26,6 +26,14 @@ export const EntityRefSchema = z
 export const DiagramTypeSchema = z.enum(["general", "er"]);
 export type DiagramType = z.infer<typeof DiagramTypeSchema>;
 
+export const NodeShapeSchema = z.enum([
+  "card",
+  "decision",
+  "terminal",
+  "store",
+]);
+export type NodeShape = z.infer<typeof NodeShapeSchema>;
+
 export const CardinalitySchema = z.enum(["1", "0..1", "1..*", "0..*"]);
 export type Cardinality = z.infer<typeof CardinalitySchema>;
 
@@ -79,6 +87,7 @@ export const DesignNodeSchema = z.object({
   id: idSlugSchema("node.id"),
   entity_ref: EntityRefSchema.optional(),
   kind: z.string().trim().min(1, "node.kind is required"),
+  shape: NodeShapeSchema.optional(),
   title: z.string().trim().min(1, "node.title is required"),
   summary: z.string().optional(),
   status: NodeStatusSchema.default("draft"),
@@ -366,6 +375,7 @@ export const NodeUpdatePatchSchema = z.object({
   id: idSlugSchema("node.id"),
   entity_ref: EntityRefSchema.nullable().optional(),
   kind: z.string().trim().min(1).optional(),
+  shape: NodeShapeSchema.nullable().optional(),
   title: z.string().trim().min(1).optional(),
   summary: z.string().nullable().optional(),
   status: NodeStatusSchema.optional(),

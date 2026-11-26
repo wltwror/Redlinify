@@ -14,6 +14,7 @@ import {
   DiagramTypeSchema,
   EdgeStyleSchema,
   EntityRefSchema,
+  NodeShapeSchema,
   NodeStatusSchema,
   RelationKindSchema,
   ThreadKindSchema,
@@ -34,10 +35,10 @@ export interface RedlinifyMcpOptions {
 }
 
 export const MCP_WORKFLOW_INSTRUCTIONS = `Redlinify is a Git-native architecture & ER workbench in .design/ (IDs: lowercase slugs a-z0-9_-; entity_ref: snake_case).
-- Start every turn with get_workspace() to inspect tabs, entity_ref slugs, pending semantic diffs, view_requests, and open threads.
-- Author/edit views with save_view(): mode="replace" to create or rewrite (diagram_type: "general" or "er"), mode="patch" for incremental updates, mode="acknowledge" to accept human edits as-is. Saving auto-starts the local UI and returns ui_url—share that link.
-- Ask in the diagram: set node status="needs_input" and anchor a question via post_thread() instead of long chat essays.
-- Respect violet locks: never mutate, delete, or unlock locked nodes/edges; resolve settled threads with a 1-line resolution_summary (Decisions), query history via get_decisions(), and link built code via sync_code_refs().`;
+- Start every turn with get_workspace() to inspect tabs, entity_ref slugs, pending diffs, view_requests, and open threads.
+- Edit views via save_view(): mode="replace" (diagram_type: "general"|"er"; optional node.shape: "card"|"decision"|"terminal"|"store"), mode="patch", or mode="acknowledge". Auto-starts UI and returns ui_url.
+- Ask in the diagram: set status="needs_input" and anchor a question via post_thread() instead of long chat replies.
+- Respect violet locks: never mutate/delete/unlock locked nodes or edges; resolve threads with a 1-line resolution_summary, query get_decisions(), and link code via sync_code_refs().`;
 
 const WireCodeRefSchema = z.object({
   path: z.string(),
@@ -77,6 +78,7 @@ const WireNodeSchema = z.object({
   id: z.string(),
   entity_ref: z.string().nullable().optional(),
   kind: z.string().optional(),
+  shape: NodeShapeSchema.nullable().optional(),
   title: z.string().optional(),
   summary: z.string().nullable().optional(),
   status: NodeStatusSchema.optional(),

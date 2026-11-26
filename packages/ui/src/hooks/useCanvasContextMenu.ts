@@ -11,7 +11,9 @@ import type {
   DesignView,
   EdgeRoute,
   HandleSide,
+  NodeShape,
 } from "@redlinify/shared/browser";
+import { NODE_SHAPE_OPTIONS } from "../layout/elk";
 import type { ContextMenuItem } from "../components/ContextMenu";
 import type { StepFlowEdge } from "../components/StepEdge";
 import type { StructuredFlowNode } from "../components/StructuredNode";
@@ -49,7 +51,8 @@ interface UseCanvasContextMenuOptions {
   screenToFlowPosition: (pos: Point) => Point;
   selectSingleNode: (nodeId: string | null) => void;
   selectSingleEdge: (edgeId: string | null) => void;
-  createBoxAtPosition: (flowPos?: Point) => Promise<void>;
+  createBoxAtPosition: (flowPos?: Point, shape?: NodeShape) => Promise<void>;
+  handleChangeNodeShape: (nodeId: string, shape: NodeShape) => Promise<void>;
   handleAutoLayout: () => Promise<void>;
   handleToggleDirection: () => Promise<void>;
   handleUndo: () => Promise<void>;
@@ -96,6 +99,7 @@ export function useCanvasContextMenu({
   selectSingleNode,
   selectSingleEdge,
   createBoxAtPosition,
+  handleChangeNodeShape,
   handleAutoLayout,
   handleToggleDirection,
   handleUndo,
@@ -221,6 +225,20 @@ export function useCanvasContextMenu({
             label: isEr ? "Add Entity Here" : "Add Box Here",
             onSelect: () => void createBoxAtPosition(contextMenu.flowPos),
           },
+          ...(isEr
+            ? []
+            : [
+                {
+                  id: "add_shape",
+                  label: "Add Shape…",
+                  children: NODE_SHAPE_OPTIONS.map((opt) => ({
+                    id: `add_shape_${opt.shape}`,
+                    label: opt.label,
+                    onSelect: () =>
+                      void createBoxAtPosition(contextMenu.flowPos, opt.shape),
+                  })),
+                },
+              ]),
           {
             id: "auto_layout",
             label: "Auto-Layout & Reset Routes",
@@ -392,6 +410,25 @@ export function useCanvasContextMenu({
           dividerBefore: true,
           onSelect: () => handleToggleLock(node.id),
         },
+        ...(isEr
+          ? []
+          : [
+              {
+                id: "change_shape",
+                label: "Change Shape…",
+                disabled: node.locked,
+                children: NODE_SHAPE_OPTIONS.map((opt) => {
+                  const isCurrent = (node.shape ?? "card") === opt.shape;
+                  return {
+                    id: `change_shape_${opt.shape}`,
+                    label: opt.label,
+                    disabled: node.locked || isCurrent,
+                    onSelect: () =>
+                      void handleChangeNodeShape(node.id, opt.shape),
+                  };
+                }),
+              },
+            ]),
         {
           id: "spec",
           label: "Edit in Spec Drawer",
@@ -544,6 +581,7 @@ export function useCanvasContextMenu({
     createBoxAtPosition,
     edgeRoutesRef,
     handleAutoLayout,
+    handleChangeNodeShape,
     handleCommitWaypoints,
     handleFlipEdge,
     handleInlineAddField,

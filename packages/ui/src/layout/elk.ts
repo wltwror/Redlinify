@@ -2,6 +2,7 @@ import type {
   DiagramType,
   DesignNode,
   DesignView,
+  NodeShape,
   ViewLayout,
 } from "@redlinify/shared/browser";
 
@@ -22,6 +23,48 @@ function getElk(): Promise<ElkInstance> {
 export const MAX_VISIBLE_SECTION_ITEMS = 5;
 export const MAX_VISIBLE_ER_FIELDS = 8;
 
+export function getEffectiveNodeShape(
+  node: DesignNode,
+  diagramType: DiagramType = "general",
+): NodeShape {
+  if (diagramType === "er" || (node.fields && node.fields.length > 0)) {
+    return "card";
+  }
+  return node.shape ?? "card";
+}
+
+export const NODE_SHAPE_OPTIONS: ReadonlyArray<{
+  shape: NodeShape;
+  label: string;
+  shortLabel: string;
+  hint: string;
+}> = [
+  {
+    shape: "card",
+    label: "Card (Box)",
+    shortLabel: "Card",
+    hint: "Structured component / service card",
+  },
+  {
+    shape: "decision",
+    label: "Decision (Rhombus)",
+    shortLabel: "Decision",
+    hint: "Conditional branch or gate diamond",
+  },
+  {
+    shape: "terminal",
+    label: "Terminal (Pill)",
+    shortLabel: "Terminal",
+    hint: "Start, end, actor, or trigger pill",
+  },
+  {
+    shape: "store",
+    label: "Store (Database)",
+    shortLabel: "Store",
+    hint: "Database, cache, or queue cylinder",
+  },
+];
+
 export function estimateNodeSize(
   node: DesignNode,
   diagramType: DiagramType = "general",
@@ -29,6 +72,29 @@ export function estimateNodeSize(
   width: number;
   height: number;
 } {
+  const shape = getEffectiveNodeShape(node, diagramType);
+
+  if (shape === "decision") {
+    const titleChars = Math.max(node.title.length, 10);
+    const width = Math.min(288, Math.max(224, Math.round(titleChars * 7 + 124)));
+    const summaryExtra = node.summary?.trim() ? 22 : 0;
+    const height = Math.max(138, Math.round(width * 0.56) + summaryExtra);
+    return { width, height };
+  }
+
+  if (shape === "terminal") {
+    const lineChars = Math.max(
+      node.title.length + 4,
+      node.kind.length + 8,
+      node.summary?.trim() ? Math.min(node.summary.trim().length, 32) : 0,
+    );
+    const width = Math.min(290, Math.max(200, Math.round(lineChars * 6.8 + 72)));
+    let height = 74;
+    if (node.summary?.trim()) height += 22;
+    if (node.entity_ref || (node.code_refs && node.code_refs.length > 0)) height += 16;
+    return { width, height: Math.max(74, height) };
+  }
+
   let longestLine = node.title.length + node.kind.length + 6;
   for (const section of node.sections) {
     longestLine = Math.max(longestLine, section.heading.length + 4);
@@ -68,6 +134,9 @@ export function estimateNodeSize(
   }
   if (node.code_refs && node.code_refs.length > 0) {
     height += 26;
+  }
+  if (shape === "store") {
+    height += 28;
   }
 
   return { width, height: Math.max(104, height + 12) };

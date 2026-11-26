@@ -146,4 +146,70 @@ describe("exportDiagram", () => {
     expect(JSON.parse(jsonText)).toEqual(generalView);
     expect(jsonText).not.toContain("waypoints");
   });
+
+  it("renders decision, terminal, and store node shapes in SVG and Mermaid export", () => {
+    const flowView: DesignView = {
+      id: "auth_flow",
+      title: "Auth Flowchart",
+      diagram_type: "general",
+      direction: "TB",
+      nodes: [
+        {
+          id: "start",
+          kind: "Terminal",
+          shape: "terminal",
+          title: "HTTP Request",
+          status: "approved",
+          locked: false,
+          sections: [],
+        },
+        {
+          id: "check",
+          kind: "Decision",
+          shape: "decision",
+          title: "Token Valid?",
+          status: "needs_input",
+          locked: false,
+          sections: [],
+        },
+        {
+          id: "sessions",
+          kind: "Cache",
+          shape: "store",
+          title: "Redis Sessions",
+          status: "draft",
+          locked: false,
+          sections: [
+            { id: "keys", heading: "Keys", items: ["sess:{id}"] },
+          ],
+        },
+      ],
+      edges: [
+        { id: "e1", source: "start", target: "check", label: "validate" },
+        { id: "e2", source: "check", target: "sessions", label: "lookup" },
+      ],
+    };
+
+    const svgRes = renderViewToSvg({
+      view: flowView,
+      positions: {
+        start: { x: 40, y: 20 },
+        check: { x: 40, y: 140 },
+        sessions: { x: 40, y: 320 },
+      },
+      theme: "dark",
+      bgPattern: "dots",
+    });
+    expect(svgRes.svg).not.toContain("<foreignObject");
+    expect(svgRes.svg).toContain("<polygon");
+    expect(svgRes.svg).toContain("<ellipse");
+    expect(svgRes.svg).toContain("HTTP Request");
+    expect(svgRes.svg).toContain("Token Valid?");
+    expect(svgRes.svg).toContain("Redis Sessions");
+
+    const mmd = renderViewToMermaid(flowView, { theme: "light" });
+    expect(mmd).toContain('start(["<small>TERMINAL</small><br/><b>HTTP Request</b>"])');
+    expect(mmd).toContain('check{"<small>DECISION · NEEDS INPUT</small><br/><b>Token Valid?</b>"}');
+    expect(mmd).toContain('sessions[("<small>CACHE</small><br/><b>Redis Sessions</b>');
+  });
 });

@@ -87,6 +87,9 @@ export function checkLockViolations(
         changedFields.push(field);
       }
     }
+    if ((existingNode.shape ?? "card") !== (incomingNode.shape ?? "card")) {
+      changedFields.push("shape");
+    }
     if (changedFields.length > 0) {
       violations.push({
         target_type: "node",
@@ -252,6 +255,11 @@ function applyNodeUpdate(node: DesignNode, patch: NodeUpdatePatch): DesignNode {
   }
 
   if (patch.kind !== undefined) next.kind = patch.kind;
+  if (patch.shape === null || patch.shape === "card") {
+    delete next.shape;
+  } else if (patch.shape !== undefined) {
+    next.shape = patch.shape;
+  }
   if (patch.title !== undefined) next.title = patch.title;
 
   if (patch.summary === null) {

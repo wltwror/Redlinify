@@ -284,6 +284,12 @@ function diffNode(beforeNode: DesignNode, afterNode: DesignNode): NodeDiff | nul
     }
   }
 
+  const beforeShape = beforeNode.shape ?? "card";
+  const afterShape = afterNode.shape ?? "card";
+  if (beforeShape !== afterShape) {
+    changes.shape = { before: beforeShape, after: afterShape };
+  }
+
   const { sections_added, sections_removed, sections_modified } = diffSections(
     beforeNode.sections,
     afterNode.sections,
