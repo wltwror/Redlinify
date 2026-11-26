@@ -72,16 +72,18 @@ Redlinify/
 │       ├── src/
 │       │   ├── api/client.ts           # Typed REST & WebSocket client
 │       │   ├── components/
-│       │   │   ├── App.tsx             # Workbench shell, shortcuts, undo/redo, theme state
+│       │   │   ├── App.tsx             # Workbench shell, canvas sync & composition
 │       │   │   ├── TabBar.tsx          # Scrollable tabs + triage badges + `+` & Search controls
 │       │   │   ├── TriageBar.tsx       # Filter bar, Export dropdown & Triage/Pending Review triggers
 │       │   │   ├── StructuredNode.tsx  # General architecture card & ER entity node
 │       │   │   ├── StepEdge.tsx        # Orthogonal/step edge with step badges, ER marks & bend handles
-│       │   │   ├── InspectorDrawer.tsx # Spec / Threads / Links & Code / Workspace Triage & Decisions drawer
+│       │   │   ├── InspectorDrawer.tsx # Drawer shell delegating element & workspace tabs
+│       │   │   ├── inspector/          # Split drawer tabs (NodeSpec, EdgeSpec, NodeLinks, ThreadPanel, WorkspacePending, WorkspaceDecisions)
 │       │   │   ├── CommandSearchModal.tsx # Typo-tolerant workspace-wide quick jump (`Ctrl+K` / `/`)
 │       │   │   ├── ContextMenu.tsx     # Canvas/node/edge/tab context menu + `Add Entry to…` submenu
 │       │   │   ├── EdgeCreateModal.tsx # Modal for new edges & ER cardinality/relation setup
 │       │   │   └── ErrorBoundary.tsx
+│       │   ├── hooks/                  # Extracted App hooks (sync, history, shortcuts, interactions, context menu, search, export, theme, toast)
 │       │   ├── layout/
 │       │   │   ├── elk.ts              # Lazy ELKjs auto-layout + incremental .layout/ merge
 │       │   │   └── routing.ts          # 4-sided handle geometry & orthogonal bend waypoint routing
