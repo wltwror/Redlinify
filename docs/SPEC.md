@@ -44,15 +44,20 @@ Redlinify/
 │   ├── SPEC.md                         # This specification
 │   └── media/                          # Vector logos, workflow SVGs & WebP screenshots
 ├── examples/
-│   └── coffee-shop/                    # Standalone sample .design/ sandbox workspace
+│   ├── coffee-shop/                    # Standalone sample .design/ general workspace
+│   └── fleet-er/                       # Standalone sample .design/ Crow's Foot ER workspace
+├── e2e/
+│   └── workbench.e2e.mjs               # Playwright Chromium E2E checks (`npm run test:e2e`)
 ├── .github/
-│   └── workflows/ci.yml                # CI workflow (typecheck, build, test)
+│   └── workflows/ci.yml                # Cross-OS CI matrix + Linux Playwright E2E job
 ├── scripts/
 │   ├── install.sh                      # One-line macOS / Linux / WSL installer
 │   └── install.ps1                     # One-line Windows PowerShell installer
 ├── packages/
 │   ├── shared/
 │   │   ├── src/
+│   │   │   ├── atomicFs.ts             # pathExists, readJsonFile & writeJsonAtomic helpers
+│   │   │   ├── fileLock.ts             # Cross-process `wx` file lock & stale-PID recovery
 │   │   │   ├── schemas.ts              # Zod v4 schemas & regex constraints
 │   │   │   ├── canonical.ts            # Deterministic object key sorting & equality
 │   │   │   ├── hash.ts                 # Canonical JSON serialization & view_hash
@@ -60,7 +65,7 @@ Redlinify/
 │   │   │   ├── guards.ts               # Lock guards, code_ref preservation & applyViewPatch
 │   │   │   ├── threadStatus.ts         # Thread waiting/resolved classification helpers
 │   │   │   ├── errors.ts               # Structured DesignError classes
-│   │   │   ├── storage.ts              # Cross-process .lock, atomic I/O, DesignStorage
+│   │   │   ├── storage.ts              # DesignStorage repository operations
 │   │   │   ├── browser.ts              # Node-free shared exports for packages/ui
 │   │   │   └── index.ts
 │   │   └── test/
@@ -93,7 +98,8 @@ Redlinify/
 │       │   │   ├── elk.ts              # Lazy ELKjs auto-layout + incremental .layout/ merge
 │       │   │   └── routing.ts          # 4-sided handle geometry & orthogonal bend waypoint routing
 │       │   └── utils/
-│       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, Mermaid `.mmd` / copy, and JSON export
+│       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, JSON export & triggers
+│       │       ├── exportMermaid.ts    # Flowchart & Crow's Foot erDiagram Mermaid exporter
 │       │       ├── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
 │       │       └── viewportNavigation.ts # Scroll Pan/Zoom wheel math & arrow acceleration curve
 │       └── test/

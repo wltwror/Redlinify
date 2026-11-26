@@ -222,6 +222,7 @@ redlinify mcp --open --dir /path/to/repo   # Start MCP + auto-open browser immed
 redlinify mcp --no-ui --dir /path/to/repo  # Headless MCP without auto-starting the UI
 redlinify ui --open --dir /path/to/repo    # Launch workbench UI standalone
 redlinify ui --open --dir examples/coffee-shop # Try the standalone Coffee Shop sandbox
+redlinify ui --open --dir examples/fleet-er    # Try the standalone Fleet ER sandbox
 redlinify stop --dir /path/to/repo         # Stop the detached UI daemon
 redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 redlinify update                           # Self-update clone, rebuild & restart active UI (or `npm run update`)
@@ -294,11 +295,13 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 npm run typecheck   # Type-check all workspace packages in topological order
 npm run build       # Build @redlinify/shared, @redlinify/server, and @redlinify/ui
 npm test            # Run Vitest unit & integration suites
+npm run test:e2e    # Run Playwright headless Chromium E2E checks
 ```
 
 * `packages/shared` (`@redlinify/shared`): Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (`@redlinify/shared/browser` for UI).
 * `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`, `update`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
-* `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
+* `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench (`exportDiagram.ts` SVG/PNG + `exportMermaid.ts`).
+* `examples/coffee-shop/` & `examples/fleet-er/`: Standalone General & Crow's Foot ER sample `.design/` workspaces.
 
 See [docs/SPEC.md](docs/SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for engineering invariants.
 
