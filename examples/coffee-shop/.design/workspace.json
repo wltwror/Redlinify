@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "project_name": "Coffee Shop Sandbox",
+  "tabs": [
+    {
+      "view_id": "sandbox_coffee_shop",
+      "title": "Sandbox: Coffee Shop (Edit Me!)",
+      "diagram_type": "general",
+      "order": 0
+    }
+  ],
+  "view_requests": []
+}

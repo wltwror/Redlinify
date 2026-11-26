@@ -1,4 +1,4 @@
-# Redlinify — Technical & Product Specification (`SPEC.md`)
+# Redlinify — Technical & Product Specification (`docs/SPEC.md`)
 
 Everything below is the authoritative architecture, schema, MCP, and workbench specification for **Redlinify**, a local-first, repo-native collaborative design workbench for human developers and AI coding agents.
 
@@ -40,6 +40,11 @@ Redlinify/
 ├── package.json                        # npm workspaces root & `update` script
 ├── tsconfig.base.json
 ├── vitest.config.ts
+├── docs/
+│   ├── SPEC.md                         # This specification
+│   └── media/                          # Vector logos, workflow SVGs & WebP screenshots
+├── examples/
+│   └── coffee-shop/                    # Standalone sample .design/ sandbox workspace
 ├── .github/
 │   └── workflows/ci.yml                # CI workflow (typecheck, build, test)
 ├── scripts/
@@ -90,7 +95,7 @@ Redlinify/
 │       │   └── utils/
 │       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, Mermaid `.mmd` / copy, and JSON export
 │       │       ├── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
-│       │       └── viewportNavigation.ts # Auto-detected Trackpad/Mouse wheel math & arrow acceleration curve
+│       │       └── viewportNavigation.ts # Scroll Pan/Zoom wheel math & arrow acceleration curve
 │       └── test/
 └── skill/
     └── SKILL.md                        # Agent workflow instructions
