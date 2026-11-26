@@ -1,10 +1,7 @@
 import { useEffect } from "react";
 import type { Connection } from "@xyflow/react";
 import type { TabStatusSummary } from "../api/client";
-import {
-  KEYBOARD_PAN_FAST_STEP,
-  KEYBOARD_PAN_STEP,
-} from "../utils/viewportNavigation";
+import type { ArrowDirectionKey } from "./useViewportNavigation";
 
 export function isEditableFocus(): boolean {
   const el = document.activeElement;
@@ -14,6 +11,15 @@ export function isEditableFocus(): boolean {
     el.tagName === "TEXTAREA" ||
     el.tagName === "SELECT" ||
     (el as HTMLElement).isContentEditable
+  );
+}
+
+function isArrowDirectionKey(key: string): key is ArrowDirectionKey {
+  return (
+    key === "ArrowUp" ||
+    key === "ArrowDown" ||
+    key === "ArrowLeft" ||
+    key === "ArrowRight"
   );
 }
 
@@ -28,7 +34,10 @@ interface UseCanvasShortcutsOptions {
   handleSelectView: (viewId: string) => Promise<void>;
   handleUndo: () => Promise<void>;
   handleRedo: () => Promise<void>;
-  panViewportBy: (dx: number, dy: number) => void;
+  startArrowPan: (key: ArrowDirectionKey, shiftKey: boolean) => void;
+  stopArrowPan: (key: ArrowDirectionKey) => void;
+  updateArrowShift: (shiftKey: boolean) => void;
+  stopAllArrowPan: () => void;
   handleZoomIn: () => void;
   handleZoomOut: () => void;
   handleFitView: () => void;
@@ -38,7 +47,7 @@ interface UseCanvasShortcutsOptions {
 /**
  * Global keyboard shortcuts: Ctrl/Cmd+K or '/' (Search), Tab / Shift+Tab
  * (Cycle tabs), Ctrl/Cmd+Z / Ctrl+Shift+Z / Ctrl+Y (Undo/Redo), plus canvas
- * zoom (+, -, 0/Shift+1, 1) and arrow-key viewport panning.
+ * zoom (+, -, 0/Shift+1, 1) and tap-or-hold arrow-key viewport panning.
  */
 export function useCanvasShortcuts({
   activeViewIdRef,
@@ -51,12 +60,21 @@ export function useCanvasShortcuts({
   handleSelectView,
   handleUndo,
   handleRedo,
-  panViewportBy,
+  startArrowPan,
+  stopArrowPan,
+  updateArrowShift,
+  stopAllArrowPan,
   handleZoomIn,
   handleZoomOut,
   handleFitView,
   handleResetZoom,
 }: UseCanvasShortcutsOptions) {
+  useEffect(() => {
+    if (searchOpen || pendingConn) {
+      stopAllArrowPan();
+    }
+  }, [pendingConn, searchOpen, stopAllArrowPan]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -66,6 +84,7 @@ export function useCanvasShortcuts({
         if (!searchOpen && hasOpenDialog) return;
         e.preventDefault();
         clearContextMenu();
+        stopAllArrowPan();
         setSearchOpen((prev) => !prev);
         return;
       }
@@ -133,34 +152,25 @@ export function useCanvasShortcuts({
         }
       }
 
+      if (e.key === "Shift") {
+        updateArrowShift(true);
+      }
+
       if (
         !mod &&
         !e.altKey &&
         !pendingConn &&
         !hasOpenDialog &&
+        isArrowDirectionKey(e.key) &&
         !document.activeElement?.closest(".react-flow__node")
       ) {
-        const step = e.shiftKey ? KEYBOARD_PAN_FAST_STEP : KEYBOARD_PAN_STEP;
-        if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          panViewportBy(step, 0);
-          return;
+        e.preventDefault();
+        if (!e.repeat) {
+          startArrowPan(e.key, e.shiftKey);
+        } else {
+          updateArrowShift(e.shiftKey);
         }
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          panViewportBy(-step, 0);
-          return;
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          panViewportBy(0, step);
-          return;
-        }
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          panViewportBy(0, -step);
-          return;
-        }
+        return;
       }
 
       if (!mod || e.altKey) return;
@@ -174,8 +184,26 @@ export function useCanvasShortcuts({
       }
     };
 
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (isArrowDirectionKey(e.key)) {
+        stopArrowPan(e.key);
+      } else if (e.key === "Shift") {
+        updateArrowShift(false);
+      }
+    };
+
+    const onBlur = () => {
+      stopAllArrowPan();
+    };
+
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
   }, [
     activeViewIdRef,
     clearContextMenu,
@@ -187,10 +215,13 @@ export function useCanvasShortcuts({
     handleZoomIn,
     handleZoomOut,
     openSearch,
-    panViewportBy,
     pendingConn,
     searchOpen,
     setSearchOpen,
+    startArrowPan,
+    stopAllArrowPan,
+    stopArrowPan,
     tabs,
+    updateArrowShift,
   ]);
 }

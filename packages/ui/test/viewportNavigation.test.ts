@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  ARROW_ACCEL_DURATION_MS,
+  ARROW_HOLD_BASE_SPEED,
+  ARROW_HOLD_DELAY_MS,
+  ARROW_HOLD_MAX_SPEED,
   MAX_ZOOM_STEP,
   TRACKPAD_PAN_SPEED,
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
+  WHEEL_GESTURE_IDLE_MS,
+  computeArrowPanSpeed,
   computeNextViewportFromWheel,
+  isLikelyMouseWheelEvent,
   normalizeWheelDelta,
+  resolveWheelDevice,
 } from "../src/utils/viewportNavigation.js";
 
 describe("viewportNavigation", () => {
@@ -15,7 +23,47 @@ describe("viewportNavigation", () => {
     expect(normalizeWheelDelta(1, 2)).toBe(320);
   });
 
-  it("pans in 2D at 1:1 speed in trackpad mode while preserving zoom", () => {
+  it("auto-detects trackpad vs discrete mouse wheel and latches asymmetrically", () => {
+    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: -100, deltaMode: 0 })).toBe(true);
+    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: -120, deltaMode: 0 })).toBe(true);
+    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: 3, deltaMode: 1 })).toBe(true);
+    expect(isLikelyMouseWheelEvent({ deltaX: 12, deltaY: 100, deltaMode: 0 })).toBe(false);
+    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: 16, deltaMode: 0 })).toBe(false);
+    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: 16.5, deltaMode: 0 })).toBe(false);
+
+    // Trackpad flick starting small (16px) stays latched to trackpad through a 100px peak spike
+    const first = resolveWheelDevice(
+      { deltaX: 0, deltaY: 16, deltaMode: 0 },
+      { device: null, lastTimestamp: 0 },
+      1000,
+    );
+    expect(first.device).toBe("trackpad");
+
+    const spikedFlick = resolveWheelDevice(
+      { deltaX: 0, deltaY: 100, deltaMode: 0 },
+      first.nextState,
+      1016,
+    );
+    expect(spikedFlick.device).toBe("trackpad");
+
+    // After idle gap, a discrete wheel notch switches cleanly to mouse zoom
+    const mouseNotch = resolveWheelDevice(
+      { deltaX: 0, deltaY: -100, deltaMode: 0 },
+      spikedFlick.nextState,
+      1016 + WHEEL_GESTURE_IDLE_MS + 20,
+    );
+    expect(mouseNotch.device).toBe("mouse");
+
+    // Moving straight from mouse wheel to a 2D trackpad scroll switches immediately to trackpad
+    const backToTrackpad = resolveWheelDevice(
+      { deltaX: 4, deltaY: 12, deltaMode: 0 },
+      mouseNotch.nextState,
+      mouseNotch.nextState.lastTimestamp + 40,
+    );
+    expect(backToTrackpad.device).toBe("trackpad");
+  });
+
+  it("pans in 2D at 1:1 speed for trackpad deltas while preserving zoom", () => {
     const res = computeNextViewportFromWheel({
       viewport: { x: 100, y: 50, zoom: 1.2 },
       clientX: 400,
@@ -27,7 +75,7 @@ describe("viewportNavigation", () => {
       ctrlKey: false,
       metaKey: false,
       shiftKey: false,
-      navMode: "trackpad",
+      detectedDevice: "trackpad",
     });
 
     expect(res.action).toBe("pan");
@@ -54,7 +102,7 @@ describe("viewportNavigation", () => {
         ctrlKey: true,
         metaKey: false,
         shiftKey: false,
-        navMode: "trackpad",
+        detectedDevice: "trackpad",
         isMac,
       });
 
@@ -62,7 +110,6 @@ describe("viewportNavigation", () => {
       expect(res.viewport.zoom).toBeGreaterThan(1.05);
       expect(res.viewport.zoom).toBeLessThan(1.08);
 
-      // Verify flow point directly under cursor remains anchored
       const px = clientX - containerRect.left;
       const py = clientY - containerRect.top;
       const flowXBefore = (px - start.x) / start.zoom;
@@ -87,7 +134,7 @@ describe("viewportNavigation", () => {
       ctrlKey: true,
       metaKey: false,
       shiftKey: false,
-      navMode: "trackpad",
+      detectedDevice: "mouse",
     });
 
     expect(res.action).toBe("zoom");
@@ -95,29 +142,29 @@ describe("viewportNavigation", () => {
   });
 
   it("converts Shift+vertical wheel into horizontal pan on non-macOS systems", () => {
-    for (const navMode of ["trackpad", "mouse"] as const) {
+    for (const detectedDevice of ["trackpad", "mouse"] as const) {
       const res = computeNextViewportFromWheel({
         viewport: { x: 0, y: 0, zoom: 1 },
         clientX: 200,
         clientY: 200,
         containerRect: { left: 0, top: 0 },
         deltaX: 0,
-        deltaY: 50,
+        deltaY: 100,
         deltaMode: 0,
         ctrlKey: false,
         metaKey: false,
         shiftKey: true,
-        navMode,
+        detectedDevice,
         isMac: false,
       });
 
       expect(res.action).toBe("pan");
-      expect(res.viewport.x).toBeCloseTo(-50 * TRACKPAD_PAN_SPEED);
+      expect(res.viewport.x).toBeCloseTo(-100 * TRACKPAD_PAN_SPEED);
       expect(res.viewport.y).toBe(0);
     }
   });
 
-  it("zooms on plain vertical wheel in mouse mode and clamps zoom bounds", () => {
+  it("zooms on detected mouse wheel and clamps zoom bounds", () => {
     const zoomedIn = computeNextViewportFromWheel({
       viewport: { x: 0, y: 0, zoom: VIEWPORT_MAX_ZOOM - 0.05 },
       clientX: 100,
@@ -129,7 +176,7 @@ describe("viewportNavigation", () => {
       ctrlKey: false,
       metaKey: false,
       shiftKey: false,
-      navMode: "mouse",
+      detectedDevice: "mouse",
     });
     expect(zoomedIn.action).toBe("zoom");
     expect(zoomedIn.viewport.zoom).toBe(VIEWPORT_MAX_ZOOM);
@@ -145,9 +192,31 @@ describe("viewportNavigation", () => {
       ctrlKey: false,
       metaKey: false,
       shiftKey: false,
-      navMode: "mouse",
+      detectedDevice: "mouse",
     });
     expect(zoomedOut.action).toBe("zoom");
     expect(zoomedOut.viewport.zoom).toBe(VIEWPORT_MIN_ZOOM);
+  });
+
+  it("keeps arrow taps slow inside grace period and accelerates quickly when held", () => {
+    expect(computeArrowPanSpeed(0, false)).toBe(0);
+    expect(computeArrowPanSpeed(ARROW_HOLD_DELAY_MS - 1, false)).toBe(0);
+    expect(computeArrowPanSpeed(ARROW_HOLD_DELAY_MS, false)).toBe(
+      ARROW_HOLD_BASE_SPEED,
+    );
+
+    const mid = computeArrowPanSpeed(
+      ARROW_HOLD_DELAY_MS + ARROW_ACCEL_DURATION_MS / 2,
+      false,
+    );
+    expect(mid).toBeGreaterThan(ARROW_HOLD_BASE_SPEED);
+    expect(mid).toBeLessThan(ARROW_HOLD_MAX_SPEED);
+
+    expect(
+      computeArrowPanSpeed(ARROW_HOLD_DELAY_MS + ARROW_ACCEL_DURATION_MS, false),
+    ).toBe(ARROW_HOLD_MAX_SPEED);
+    expect(
+      computeArrowPanSpeed(ARROW_HOLD_DELAY_MS + ARROW_ACCEL_DURATION_MS, true),
+    ).toBe(ARROW_HOLD_MAX_SPEED * 1.5);
   });
 });

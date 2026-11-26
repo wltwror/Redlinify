@@ -4,11 +4,21 @@ import type { useReactFlow } from "@xyflow/react";
 import { saveLayout } from "../api/client";
 import type { Point } from "../layout/routing";
 import {
-  computeNextViewportFromWheel,
+  ARROW_TAP_FAST_STEP,
+  ARROW_TAP_STEP,
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
-  type NavigationMode,
+  computeArrowPanSpeed,
+  computeNextViewportFromWheel,
+  resolveWheelDevice,
+  type WheelGestureState,
 } from "../utils/viewportNavigation";
+
+export type ArrowDirectionKey =
+  | "ArrowUp"
+  | "ArrowDown"
+  | "ArrowLeft"
+  | "ArrowRight";
 
 interface RefBox<T> {
   current: T;
@@ -20,7 +30,6 @@ interface UseViewportNavigationOptions {
   positionsRef: RefBox<Record<string, Point>>;
   edgeRoutesRef: RefBox<Record<string, EdgeRoute>>;
   viewportReadyRef: RefBox<boolean>;
-  navMode: NavigationMode;
   getViewport: ReturnType<typeof useReactFlow>["getViewport"];
   setViewport: ReturnType<typeof useReactFlow>["setViewport"];
   fitView: ReturnType<typeof useReactFlow>["fitView"];
@@ -33,13 +42,27 @@ interface UseViewportNavigationOptions {
 const WHEEL_IGNORE_SELECTOR =
   '.nowheel, .react-flow__controls, [role="dialog"], [role="menu"]';
 
+function getDirectionVector(pressed: Set<ArrowDirectionKey>): Point {
+  let vx = 0;
+  let vy = 0;
+  if (pressed.has("ArrowLeft")) vx += 1;
+  if (pressed.has("ArrowRight")) vx -= 1;
+  if (pressed.has("ArrowUp")) vy += 1;
+  if (pressed.has("ArrowDown")) vy -= 1;
+  if (vx !== 0 && vy !== 0) {
+    const invSqrt2 = 1 / Math.SQRT2;
+    vx *= invSqrt2;
+    vy *= invSqrt2;
+  }
+  return { x: vx, y: vy };
+}
+
 export function useViewportNavigation({
   containerRef,
   activeViewIdRef,
   positionsRef,
   edgeRoutesRef,
   viewportReadyRef,
-  navMode,
   getViewport,
   setViewport,
   fitView,
@@ -49,6 +72,16 @@ export function useViewportNavigation({
   clearContextMenu,
 }: UseViewportNavigationOptions) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wheelGestureRef = useRef<WheelGestureState>({
+    device: null,
+    lastTimestamp: 0,
+  });
+
+  const pressedArrowsRef = useRef<Set<ArrowDirectionKey>>(new Set());
+  const arrowShiftRef = useRef(false);
+  const arrowStartTsRef = useRef(0);
+  const arrowLastFrameTsRef = useRef(0);
+  const arrowRafRef = useRef<number | null>(null);
 
   const scheduleSaveLayout = useCallback(() => {
     if (saveTimerRef.current) {
@@ -72,13 +105,21 @@ export function useViewportNavigation({
     viewportReadyRef,
   ]);
 
+  const cancelArrowLoop = useCallback(() => {
+    if (arrowRafRef.current !== null) {
+      cancelAnimationFrame(arrowRafRef.current);
+      arrowRafRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
+      cancelArrowLoop();
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
       }
     };
-  }, []);
+  }, [cancelArrowLoop]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -99,6 +140,13 @@ export function useViewportNavigation({
       e.stopPropagation();
       clearContextMenu();
 
+      const { device, nextState } = resolveWheelDevice(
+        { deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode },
+        wheelGestureRef.current,
+        performance.now(),
+      );
+      wheelGestureRef.current = nextState;
+
       const next = computeNextViewportFromWheel({
         viewport: getViewport(),
         clientX: e.clientX,
@@ -110,7 +158,7 @@ export function useViewportNavigation({
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
         shiftKey: e.shiftKey,
-        navMode,
+        detectedDevice: device,
         isMac,
         minZoom: VIEWPORT_MIN_ZOOM,
         maxZoom: VIEWPORT_MAX_ZOOM,
@@ -138,27 +186,113 @@ export function useViewportNavigation({
     clearContextMenu,
     containerRef,
     getViewport,
-    navMode,
     scheduleSaveLayout,
     setViewport,
   ]);
 
-  const panViewportBy = useCallback(
-    (dx: number, dy: number) => {
+  const runArrowTick = useCallback(
+    (now: number) => {
+      if (pressedArrowsRef.current.size === 0 || !activeViewIdRef.current) {
+        arrowRafRef.current = null;
+        return;
+      }
+
+      const dt = Math.min(
+        Math.max((now - arrowLastFrameTsRef.current) / 1000, 0),
+        0.05,
+      );
+      arrowLastFrameTsRef.current = now;
+
+      const speed = computeArrowPanSpeed(
+        now - arrowStartTsRef.current,
+        arrowShiftRef.current,
+      );
+      if (speed > 0 && dt > 0) {
+        const dir = getDirectionVector(pressedArrowsRef.current);
+        if (dir.x !== 0 || dir.y !== 0) {
+          const vp = getViewport();
+          void setViewport(
+            {
+              x: vp.x + dir.x * speed * dt,
+              y: vp.y + dir.y * speed * dt,
+              zoom: vp.zoom,
+            },
+            { duration: 0 },
+          );
+        }
+      }
+
+      arrowRafRef.current = requestAnimationFrame(runArrowTick);
+    },
+    [activeViewIdRef, getViewport, setViewport],
+  );
+
+  const startArrowPan = useCallback(
+    (key: ArrowDirectionKey, shiftKey: boolean) => {
       if (!activeViewIdRef.current) return;
-      const current = getViewport();
+      arrowShiftRef.current = shiftKey;
+      if (pressedArrowsRef.current.has(key)) return;
+
+      const wasIdle = pressedArrowsRef.current.size === 0;
+      const now = performance.now();
+      if (wasIdle) {
+        arrowStartTsRef.current = now;
+        arrowLastFrameTsRef.current = now;
+      }
+      pressedArrowsRef.current.add(key);
+
+      const tapStep = shiftKey ? ARROW_TAP_FAST_STEP : ARROW_TAP_STEP;
+      const dx = key === "ArrowLeft" ? tapStep : key === "ArrowRight" ? -tapStep : 0;
+      const dy = key === "ArrowUp" ? tapStep : key === "ArrowDown" ? -tapStep : 0;
+      const vp = getViewport();
       void setViewport(
         {
-          x: current.x + dx,
-          y: current.y + dy,
-          zoom: current.zoom,
+          x: vp.x + dx,
+          y: vp.y + dy,
+          zoom: vp.zoom,
         },
-        { duration: 90 },
+        { duration: 0 },
       );
       scheduleSaveLayout();
+
+      if (arrowRafRef.current === null) {
+        arrowRafRef.current = requestAnimationFrame(runArrowTick);
+      }
     },
-    [activeViewIdRef, getViewport, scheduleSaveLayout, setViewport],
+    [
+      activeViewIdRef,
+      getViewport,
+      runArrowTick,
+      scheduleSaveLayout,
+      setViewport,
+    ],
   );
+
+  const stopArrowPan = useCallback(
+    (key: ArrowDirectionKey) => {
+      if (!pressedArrowsRef.current.has(key)) return;
+      pressedArrowsRef.current.delete(key);
+      if (pressedArrowsRef.current.size === 0) {
+        cancelArrowLoop();
+        scheduleSaveLayout();
+      }
+    },
+    [cancelArrowLoop, scheduleSaveLayout],
+  );
+
+  const updateArrowShift = useCallback((shiftKey: boolean) => {
+    arrowShiftRef.current = shiftKey;
+  }, []);
+
+  const stopAllArrowPan = useCallback(() => {
+    const hadActive = pressedArrowsRef.current.size > 0;
+    pressedArrowsRef.current.clear();
+    arrowShiftRef.current = false;
+    cancelArrowLoop();
+    if (hadActive) {
+      scheduleSaveLayout();
+    }
+  }, [cancelArrowLoop, scheduleSaveLayout]);
 
   const handleZoomIn = useCallback(() => {
     if (!activeViewIdRef.current) return;
@@ -185,7 +319,10 @@ export function useViewportNavigation({
   }, [activeViewIdRef, scheduleSaveLayout, zoomTo]);
 
   return {
-    panViewportBy,
+    startArrowPan,
+    stopArrowPan,
+    updateArrowShift,
+    stopAllArrowPan,
     handleZoomIn,
     handleZoomOut,
     handleFitView,

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import type { NavigationMode } from "../utils/viewportNavigation";
 
 export function useThemePreferences() {
   const [theme, setTheme] = useState<"dark" | "light">(() =>
@@ -12,15 +11,6 @@ export function useThemePreferences() {
         : "dots";
     } catch {
       return "dots";
-    }
-  });
-  const [navMode, setNavMode] = useState<NavigationMode>(() => {
-    try {
-      return localStorage.getItem("redlinify-nav-mode") === "mouse"
-        ? "mouse"
-        : "trackpad";
-    } catch {
-      return "trackpad";
     }
   });
 
@@ -41,14 +31,6 @@ export function useThemePreferences() {
     }
   }, [bgPattern]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem("redlinify-nav-mode", navMode);
-    } catch {
-      // Ignore storage errors in restricted contexts
-    }
-  }, [navMode]);
-
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
@@ -57,16 +39,10 @@ export function useThemePreferences() {
     setBgPattern((prev) => (prev === "dots" ? "grid" : "dots"));
   }, []);
 
-  const toggleNavMode = useCallback(() => {
-    setNavMode((prev) => (prev === "trackpad" ? "mouse" : "trackpad"));
-  }, []);
-
   return {
     theme,
     bgPattern,
-    navMode,
     toggleTheme,
     toggleBgPattern,
-    toggleNavMode,
   };
 }

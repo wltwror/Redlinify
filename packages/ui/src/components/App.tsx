@@ -95,7 +95,7 @@ function WorkbenchInner() {
     zoomTo,
   } = useReactFlow();
 
-  const { theme, bgPattern, navMode, toggleTheme, toggleBgPattern, toggleNavMode } =
+  const { theme, bgPattern, toggleTheme, toggleBgPattern } =
     useThemePreferences();
   const { toast, showToast } = useToast();
 
@@ -521,7 +521,10 @@ function WorkbenchInner() {
   });
 
   const {
-    panViewportBy,
+    startArrowPan,
+    stopArrowPan,
+    updateArrowShift,
+    stopAllArrowPan,
     handleZoomIn,
     handleZoomOut,
     handleFitView,
@@ -532,7 +535,6 @@ function WorkbenchInner() {
     positionsRef,
     edgeRoutesRef,
     viewportReadyRef,
-    navMode,
     getViewport,
     setViewport,
     fitView,
@@ -553,7 +555,10 @@ function WorkbenchInner() {
     handleSelectView,
     handleUndo,
     handleRedo,
-    panViewportBy,
+    startArrowPan,
+    stopArrowPan,
+    updateArrowShift,
+    stopAllArrowPan,
     handleZoomIn,
     handleZoomOut,
     handleFitView,
@@ -881,8 +886,6 @@ function WorkbenchInner() {
         onToggleTheme={toggleTheme}
         bgPattern={bgPattern}
         onToggleBgPattern={toggleBgPattern}
-        navMode={navMode}
-        onToggleNavMode={toggleNavMode}
       />
 
       <TriageBar

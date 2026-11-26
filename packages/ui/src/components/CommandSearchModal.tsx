@@ -98,6 +98,19 @@ export function CommandSearchModal({
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => window.removeEventListener("keydown", onWindowKeyDown);
+  }, [open, onClose]);
+
+  useEffect(() => {
     setActiveIndex(0);
   }, [query, scope]);
 
@@ -160,6 +173,7 @@ export function CommandSearchModal({
           <Search className="h-4 w-4 shrink-0 text-sky-400" />
           <input
             ref={inputRef}
+            autoFocus
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
