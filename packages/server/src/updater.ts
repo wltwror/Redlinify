@@ -51,9 +51,19 @@ export function resolveInstallRoot(entryFilePath?: string): string | null {
   try {
     const rawEntry = entryFilePath ?? fileURLToPath(import.meta.url);
     const realEntry = existsSync(rawEntry) ? realpathSync(rawEntry) : rawEntry;
+    const segments = path.dirname(realEntry).split(path.sep);
+    if (segments.includes("node_modules")) {
+      return null;
+    }
     const candidate = path.resolve(path.dirname(realEntry), "../../..");
     const rootPkgPath = path.join(candidate, "package.json");
-    if (!existsSync(rootPkgPath)) return null;
+    const serverPkgPath = path.join(
+      candidate,
+      "packages",
+      "server",
+      "package.json",
+    );
+    if (!existsSync(rootPkgPath) || !existsSync(serverPkgPath)) return null;
     const pkg = JSON.parse(readFileSync(rootPkgPath, "utf8")) as {
       name?: unknown;
     };
@@ -69,9 +79,9 @@ function readServerVersion(installRoot: string): string {
     const parsed = JSON.parse(readFileSync(pkgPath, "utf8")) as {
       version?: unknown;
     };
-    return typeof parsed.version === "string" ? parsed.version : "0.2.1";
+    return typeof parsed.version === "string" ? parsed.version : "0.3.0";
   } catch {
-    return "0.2.1";
+    return "0.3.0";
   }
 }
 
@@ -178,7 +188,7 @@ export async function runSelfUpdate(
 
   if (!installRoot) {
     throw new Error(
-      "Could not locate the Redlinify repository root. Update via your package manager or pull manually in your clone.",
+      "This Redlinify installation was not installed from a Git clone (e.g. npx or npm install -g). Update via npm instead: npm install -g redlinify@latest (or run npx -y redlinify@latest mcp).",
     );
   }
 

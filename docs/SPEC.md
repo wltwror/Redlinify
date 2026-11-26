@@ -44,15 +44,20 @@ Redlinify/
 │   ├── SPEC.md                         # This specification
 │   └── media/                          # Vector logos, workflow SVGs & WebP screenshots
 ├── examples/
-│   └── coffee-shop/                    # Standalone sample .design/ sandbox workspace
+│   ├── coffee-shop/                    # Standalone sample .design/ general workspace
+│   └── fleet-er/                       # Standalone sample .design/ Crow's Foot ER workspace
+├── e2e/
+│   └── workbench.e2e.mjs               # Playwright Chromium E2E checks (`npm run test:e2e`)
 ├── .github/
-│   └── workflows/ci.yml                # CI workflow (typecheck, build, test)
+│   └── workflows/ci.yml                # Cross-OS CI matrix + Linux Playwright E2E job
 ├── scripts/
 │   ├── install.sh                      # One-line macOS / Linux / WSL installer
 │   └── install.ps1                     # One-line Windows PowerShell installer
 ├── packages/
 │   ├── shared/
 │   │   ├── src/
+│   │   │   ├── atomicFs.ts             # pathExists, readJsonFile & writeJsonAtomic helpers
+│   │   │   ├── fileLock.ts             # Cross-process `wx` file lock & stale-PID recovery
 │   │   │   ├── schemas.ts              # Zod v4 schemas & regex constraints
 │   │   │   ├── canonical.ts            # Deterministic object key sorting & equality
 │   │   │   ├── hash.ts                 # Canonical JSON serialization & view_hash
@@ -60,7 +65,7 @@ Redlinify/
 │   │   │   ├── guards.ts               # Lock guards, code_ref preservation & applyViewPatch
 │   │   │   ├── threadStatus.ts         # Thread waiting/resolved classification helpers
 │   │   │   ├── errors.ts               # Structured DesignError classes
-│   │   │   ├── storage.ts              # Cross-process .lock, atomic I/O, DesignStorage
+│   │   │   ├── storage.ts              # DesignStorage repository operations
 │   │   │   ├── browser.ts              # Node-free shared exports for packages/ui
 │   │   │   └── index.ts
 │   │   └── test/
@@ -68,7 +73,8 @@ Redlinify/
 │   │   ├── src/
 │   │   │   ├── cli.ts                  # `init`, `mcp`, `ui`, `stop`, `update` CLI
 │   │   │   ├── mcp.ts                  # 6 lean MCP tools registration & validation
-│   │   │   ├── web.ts                  # REST API + WebSocket watcher (self-echo suppression)
+│   │   │   ├── web.ts                  # REST API (`/api/preferences`, views, threads) + WebSocket watcher
+│   │   │   ├── preferences.ts          # Global `~/.redlinify/preferences.json` persistence store
 │   │   │   ├── uiDaemon.ts             # Detached .design/.ui-server.json daemon lifecycle
 │   │   │   ├── updater.ts              # Self-updater (`redlinify update` / `npm run update`)
 │   │   │   └── index.ts
@@ -79,7 +85,8 @@ Redlinify/
 │       │   ├── components/
 │       │   │   ├── App.tsx             # Workbench shell, canvas sync & composition
 │       │   │   ├── TabBar.tsx          # Scrollable tabs + triage badges + `+` & Search controls
-│       │   │   ├── TriageBar.tsx       # Filter bar, Export dropdown & Triage/Pending Review triggers
+│       │   │   ├── TriageBar.tsx       # Filter pills, grouped Agent Review drawers & Export menu
+│       │   │   ├── CanvasDock.tsx      # Floating canvas toolbar (`+`, Undo/Redo, TB/LR, Auto-Layout)
 │       │   │   ├── StructuredNode.tsx  # General architecture card & ER entity node
 │       │   │   ├── StepEdge.tsx        # Orthogonal/step edge with step badges, ER marks & bend handles
 │       │   │   ├── InspectorDrawer.tsx # Drawer shell delegating element & workspace tabs
@@ -93,7 +100,8 @@ Redlinify/
 │       │   │   ├── elk.ts              # Lazy ELKjs auto-layout + incremental .layout/ merge
 │       │   │   └── routing.ts          # 4-sided handle geometry & orthogonal bend waypoint routing
 │       │   └── utils/
-│       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, Mermaid `.mmd` / copy, and JSON export
+│       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, JSON export & triggers
+│       │       ├── exportMermaid.ts    # Flowchart & Crow's Foot erDiagram Mermaid exporter
 │       │       ├── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
 │       │       └── viewportNavigation.ts # Scroll Pan/Zoom wheel math & arrow acceleration curve
 │       └── test/
@@ -138,6 +146,7 @@ Implemented strictly with Zod v4 in [`packages/shared/src/schemas.ts`](packages/
 ```typescript
 // .design/workspace.json
 export type DiagramType = "general" | "er";
+export type NodeShape = "card" | "decision" | "terminal" | "store";
 export type Cardinality = "1" | "0..1" | "1..*" | "0..*";
 export type RelationKind = "association" | "identifying" | "subtype";
 export type HandleSide = "top" | "right" | "bottom" | "left";
@@ -186,6 +195,7 @@ export interface DesignNode {
   id: string;               // stable slug, e.g. "dedup_engine"
   entity_ref?: string;      // optional canonical snake_case key linking same concept across tabs
   kind: string;             // short badge: "Class", "Interface", "Stage", "Entity", "Store"
+  shape?: NodeShape;        // optional general-view silhouette ("card" default, "decision" rhombus, "terminal" pill, "store" cylinder)
   title: string;
   summary?: string;
   status: NodeStatus;
@@ -317,10 +327,10 @@ Build a clean, theme-aware developer workbench hosted at **`http://127.0.0.1:417
    * **Layout Engine (`elkjs`, lazy-loaded):**
      * Auto-lays out nodes according to `view.direction` (`TB` or `LR`) using deterministic estimates + measured dimensions.
      * Applies `.layout/{view_id}.json` manual position overrides only for nodes that have saved positions so adding one node doesn't scramble existing ones, alongside per-edge `edge_routes`.
-     * Includes an **"Auto-Layout / Reset Positions"** toolbar button that clears overrides for the active tab.
-   * **Lightweight Inline & Spatial Editing & Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`):**
-     * **Scroll Wheel Mode (`Scroll: Pan | Zoom`) & Keyboard Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`):** Bottom-left segmented `Scroll: Pan | Zoom` pill next to zoom controls (defaults to `Pan`, persisted per browser via `localStorage`): in `Pan` mode, scroll / 2-finger swipe pans (`1:1`) while pinch or `Ctrl+Scroll`/`Cmd+Scroll` zooms; in `Zoom` mode, vertical scroll zooms smoothly toward the cursor while drag, `Space+Drag`, `Shift+Scroll`, or `Arrow` keys pan (pinch still zooms). Supports `+`/`-`/`0`/`1`/`Shift+1` zoom shortcuts and smooth tap-vs-hold accelerated `Arrow` panning (with `Shift+Arrow` boost and diagonal movement). `overscroll-behavior: none` prevents unintended browser swipe-back navigation.
-     * Toolbar `+ Add Box` / `+ Add Entity`, multi-select (`Ctrl/Cmd+Click` or `Shift+Drag` marquee), and right-click context menus (dismissed automatically on pan/drag/wheel).
+     * Includes an **"Auto-Layout"** button in the floating bottom-center **Canvas Dock** (`CanvasDock.tsx`: `[+ | ▾]` shape picker, `Undo/Redo`, `TB/LR`, `Auto-Layout`) that clears position/route overrides for the active tab.
+   * **Lightweight Inline & Spatial Editing & Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`, `preferences.ts`):**
+     * **Scroll Wheel Mode (`Scroll: Pan | Zoom`) & Global Preferences:** Bottom-left segmented `Scroll: Pan | Zoom` pill next to zoom controls (defaults to `Pan`): in `Pan` mode, scroll / 2-finger swipe pans (`1:1`) while pinch or `Ctrl+Scroll`/`Cmd+Scroll` zooms; in `Zoom` mode, vertical scroll zooms smoothly toward the cursor while drag, `Space+Drag`, `Shift+Scroll`, or `Arrow` keys pan (pinch still zooms). `scroll_mode`, `theme`, and `bg_pattern` persist globally across repos/ports in `~/.redlinify/preferences.json` via `GET/PUT /api/preferences` (with browser `localStorage` as immediate initial cache). Supports `+`/`-`/`0`/`1`/`Shift+1` zoom shortcuts and smooth tap-vs-hold accelerated `Arrow` panning (with `Shift+Arrow` boost and diagonal movement). `overscroll-behavior: none` prevents unintended browser swipe-back navigation.
+     * Floating `CanvasDock` `+` button (or right-click canvas), multi-select (`Ctrl/Cmd+Click` or `Shift+Drag` marquee), and right-click context menus (dismissed automatically on pan/drag/wheel).
      * Drag from any of 4-sided node handles to create a new edge (`EdgeCreateModal.tsx` for label, step number, style, or ER cardinality/relation kind).
      * Select an edge and drag its midpoint or segment split handles to create orthogonal waypoints persisted in `.layout/{view_id}.json` (`edge_routes`).
      * Double-click title, section entries, or ER attributes to edit inline (clearing entry/attribute text + pressing `Enter` deletes the item); `Delete`/`Backspace` removes selected **unlocked** nodes/edges **only when no input/textarea/contentEditable element is focused**.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { useReactFlow } from "@xyflow/react";
+import type { Viewport } from "@xyflow/react";
 import type {
   DesignThread,
   DesignView,
@@ -24,15 +24,17 @@ interface RefBox<T> {
   current: T;
 }
 
+export type PendingViewportSync =
+  | { layoutVersion: number; kind: "fit" }
+  | { layoutVersion: number; kind: "restore"; viewport: Viewport };
+
 interface UseWorkspaceSyncOptions {
   activeViewIdRef: RefBox<string | null>;
   activeViewRef: RefBox<DesignView | null>;
   positionsRef: RefBox<Record<string, Point>>;
   edgeRoutesRef: RefBox<Record<string, EdgeRoute>>;
   viewportReadyRef: RefBox<boolean>;
-  fitView: ReturnType<typeof useReactFlow>["fitView"];
-  setViewport: ReturnType<typeof useReactFlow>["setViewport"];
-  getViewport: ReturnType<typeof useReactFlow>["getViewport"];
+  getViewport: () => Viewport;
   pushHistoryEntry: (viewId: string, customEntry?: HistoryEntry) => void;
   showToast: (message: string, tone?: "info" | "warning" | "error") => void;
 }
@@ -43,8 +45,6 @@ export function useWorkspaceSync({
   positionsRef,
   edgeRoutesRef,
   viewportReadyRef,
-  fitView,
-  setViewport,
   getViewport,
   pushHistoryEntry,
   showToast,
@@ -64,7 +64,10 @@ export function useWorkspaceSync({
 
   const viewHashRef = useRef<string | undefined>(undefined);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const layoutVersionRef = useRef(0);
+  const pendingViewportSyncRef = useRef<PendingViewportSync | null>(null);
 
+  layoutVersionRef.current = Math.max(layoutVersionRef.current, layoutVersion);
   activeViewIdRef.current = activeViewId;
   activeViewRef.current = activeView;
   viewHashRef.current = viewHash;
@@ -107,6 +110,24 @@ export function useWorkspaceSync({
         { forceReset: options?.forceResetLayout },
       );
 
+      const targetLayoutVersion = layoutVersionRef.current + 1;
+      layoutVersionRef.current = targetLayoutVersion;
+
+      if (!options?.preserveViewport) {
+        viewportReadyRef.current = false;
+        pendingViewportSyncRef.current =
+          detail.layout.viewport && !options?.forceResetLayout
+            ? {
+                layoutVersion: targetLayoutVersion,
+                kind: "restore",
+                viewport: detail.layout.viewport,
+              }
+            : {
+                layoutVersion: targetLayoutVersion,
+                kind: "fit",
+              };
+      }
+
       positionsRef.current = mergedPositions;
       edgeRoutesRef.current = options?.forceResetLayout
         ? {}
@@ -116,25 +137,11 @@ export function useWorkspaceSync({
       setViewHash(detail.view_hash);
       setViewDiff(detail.diff);
       setConflictBanner(false);
-      setLayoutVersion((v) => v + 1);
+      setLayoutVersion(targetLayoutVersion);
       setRoutingTick((t) => t + 1);
-
-      if (!options?.preserveViewport) {
-        viewportReadyRef.current = false;
-        requestAnimationFrame(() => {
-          if (detail.layout.viewport && !options?.forceResetLayout) {
-            void setViewport(detail.layout.viewport, { duration: 150 });
-          } else {
-            void fitView({ padding: 0.16, maxZoom: 1.05, duration: 180 });
-          }
-          setTimeout(() => {
-            viewportReadyRef.current = true;
-          }, 250);
-        });
-      }
       return detail.view;
     },
-    [activeViewRef, edgeRoutesRef, fitView, positionsRef, setViewport, viewportReadyRef],
+    [activeViewRef, edgeRoutesRef, positionsRef, viewportReadyRef],
   );
 
   // Initial load
@@ -296,6 +303,7 @@ export function useWorkspaceSync({
     conflictBanner,
     layoutVersion,
     setLayoutVersion,
+    pendingViewportSyncRef,
     routingTick,
     setRoutingTick,
     loadWorkspaceMeta,

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "project_name": "Fleet ER Sandbox",
+  "tabs": [
+    {
+      "view_id": "sandbox_fleet_er",
+      "title": "Sandbox: Fleet ER Model",
+      "diagram_type": "er",
+      "order": 0
+    }
+  ],
+  "view_requests": []
+}

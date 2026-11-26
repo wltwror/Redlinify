@@ -1,0 +1,429 @@
+{
+  "id": "sandbox_fleet_er",
+  "title": "Sandbox: Fleet ER Model",
+  "diagram_type": "er",
+  "direction": "LR",
+  "created_by": "agent",
+  "nodes": [
+    {
+      "id": "customer",
+      "kind": "Entity",
+      "title": "Customer",
+      "summary": "Client placing transport orders",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "email",
+          "name": "email",
+          "type": "varchar(255)",
+          "unique": true,
+          "nullable": false
+        },
+        {
+          "id": "phone",
+          "name": "phone",
+          "type": "varchar(32)",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "id": "dispatcher",
+      "kind": "Entity",
+      "title": "Dispatcher",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "type": "varchar(120)",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "order",
+      "kind": "Entity",
+      "title": "Order",
+      "summary": "Customer ride request & requirements",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "customer_id",
+          "name": "customer_id",
+          "type": "uuid",
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "dispatcher_id",
+          "name": "dispatcher_id",
+          "type": "uuid",
+          "fk": true,
+          "nullable": true
+        },
+        {
+          "id": "pickup_place",
+          "name": "pickup_place",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "id": "pickup_time",
+          "name": "pickup_time",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "id": "destination",
+          "name": "destination",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "id": "route_notes",
+          "name": "route_notes",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "id": "car_prefs",
+          "name": "car_prefs",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "type": "varchar(32)",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "ride",
+      "kind": "Entity",
+      "title": "Ride",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "order_id",
+          "name": "order_id",
+          "type": "uuid",
+          "fk": true,
+          "unique": true,
+          "nullable": false
+        },
+        {
+          "id": "shift_id",
+          "name": "shift_id",
+          "type": "uuid",
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "status",
+          "name": "status",
+          "type": "varchar(32)",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "driver",
+      "kind": "Entity",
+      "title": "Driver",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "license_no",
+          "name": "license_no",
+          "type": "varchar(64)",
+          "unique": true,
+          "nullable": false
+        },
+        {
+          "id": "insurance",
+          "name": "insurance",
+          "type": "varchar(120)",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "shift",
+      "kind": "Entity",
+      "title": "Shift",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "driver_id",
+          "name": "driver_id",
+          "type": "uuid",
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "vehicle_id",
+          "name": "vehicle_id",
+          "type": "uuid",
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "started_at",
+          "name": "started_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "vehicle",
+      "kind": "Entity",
+      "title": "Vehicle",
+      "summary": "Supertype entity (Van / Car)",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "fleet_id",
+          "name": "fleet_id",
+          "type": "uuid",
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "plate",
+          "name": "plate",
+          "type": "varchar(16)",
+          "unique": true,
+          "nullable": false
+        },
+        {
+          "id": "insurance",
+          "name": "insurance",
+          "type": "varchar(120)",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "van",
+      "kind": "Entity",
+      "title": "Van",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "vehicle_id",
+          "name": "vehicle_id",
+          "type": "uuid",
+          "pk": true,
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "cargo_kg",
+          "name": "cargo_kg",
+          "type": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "car",
+      "kind": "Entity",
+      "title": "Car",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "vehicle_id",
+          "name": "vehicle_id",
+          "type": "uuid",
+          "pk": true,
+          "fk": true,
+          "nullable": false
+        },
+        {
+          "id": "seats",
+          "name": "seats",
+          "type": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "id": "fleet",
+      "kind": "Entity",
+      "title": "Fleet",
+      "status": "draft",
+      "locked": false,
+      "sections": [],
+      "fields": [
+        {
+          "id": "id",
+          "name": "id",
+          "type": "uuid",
+          "pk": true,
+          "nullable": false
+        },
+        {
+          "id": "name",
+          "name": "name",
+          "type": "varchar(120)",
+          "unique": true,
+          "nullable": false
+        },
+        {
+          "id": "lot_type",
+          "name": "lot_type",
+          "type": "varchar(64)",
+          "nullable": true
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "er_cust_order",
+      "source": "customer",
+      "target": "order",
+      "label": "places",
+      "source_cardinality": "1",
+      "target_cardinality": "0..*",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_disp_order",
+      "source": "dispatcher",
+      "target": "order",
+      "label": "assigns",
+      "source_cardinality": "0..1",
+      "target_cardinality": "0..*",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_order_ride",
+      "source": "order",
+      "target": "ride",
+      "label": "executes",
+      "source_cardinality": "1",
+      "target_cardinality": "0..1",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_shift_ride",
+      "source": "ride",
+      "target": "shift",
+      "label": "drives",
+      "source_cardinality": "0..*",
+      "target_cardinality": "1",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_driver_shift",
+      "source": "driver",
+      "target": "shift",
+      "label": "works",
+      "source_cardinality": "1",
+      "target_cardinality": "0..*",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_vehicle_shift",
+      "source": "vehicle",
+      "target": "shift",
+      "label": "assigned",
+      "source_cardinality": "1",
+      "target_cardinality": "0..*",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_fleet_vehicle",
+      "source": "fleet",
+      "target": "vehicle",
+      "label": "owns",
+      "source_cardinality": "1",
+      "target_cardinality": "1..*",
+      "relation_kind": "association"
+    },
+    {
+      "id": "er_van_vehicle",
+      "source": "van",
+      "target": "vehicle",
+      "relation_kind": "subtype"
+    },
+    {
+      "id": "er_car_vehicle",
+      "source": "car",
+      "target": "vehicle",
+      "relation_kind": "subtype"
+    }
+  ]
+}

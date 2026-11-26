@@ -1,6 +1,6 @@
 {
   "name": "redlinify",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Stop fighting AI architecture in chat. Visual, Git-native diagrams & ER schemas shared between developers and coding agents via MCP.",
   "homepage": "https://github.com/wltwror/Redlinify#readme",
   "repository": {
@@ -32,13 +32,17 @@
   },
   "scripts": {
     "build": "npm run build -w @redlinify/shared && npm run build -w @redlinify/server && npm run build -w @redlinify/ui",
+    "build:npm": "npm run build && node scripts/build-npm-package.mjs",
     "typecheck": "npm run build -w @redlinify/shared && npm run typecheck -w @redlinify/server && npm run typecheck -w @redlinify/ui",
     "test": "vitest run",
+    "test:e2e": "node e2e/workbench.e2e.mjs",
+    "test:npm-pack": "node scripts/test-npm-pack.mjs",
     "test:watch": "vitest",
     "update": "node packages/server/dist/cli.js update"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "playwright": "^1.52.0",
     "typescript": "^5.7.3",
     "vitest": "^5.1.2"
   }

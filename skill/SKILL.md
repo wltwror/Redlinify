@@ -12,7 +12,7 @@ Use Redlinify whenever designing, refactoring, or clarifying non-trivial softwar
 ## 1. Initial Design
 1. Call `get_workspace()` first to inspect existing views, pending `view_requests`, open feedback, and existing `entity_ref` slugs.
 2. Choose **2–4 focused views** matching the problem (typically `Classes`, `Algorithm`, `Integrations`, and `Dataflow` when relevant) and author them via `save_view({ mode: "replace", ... })` (this automatically ensures `.design/` is initialized and starts the local UI workbench, returning `ui_url`).
-3. Keep structured cards concise (4–6 items per section). Reuse canonical `snake_case` `entity_ref` slugs for concepts spanning multiple views.
+3. Keep structured cards concise (4–6 items per section). Reuse canonical `snake_case` `entity_ref` slugs for concepts spanning multiple views. In `"general"` views, set optional `node.shape` (`"decision"` rhombus, `"terminal"` pill, `"store"` cylinder, or omit/`"card"`) when flowchart/database silhouettes clarify control flow or storage boundaries.
 
 ## 2. Ask in the Diagram, Not in Chat
 * When facing a genuine architectural tradeoff or ambiguity, commit your best draft choice, set the node's `status` to `"needs_input"`, and anchor a concise `question` thread on that exact node or edge via `post_thread`.

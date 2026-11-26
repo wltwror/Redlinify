@@ -1,17 +1,20 @@
 import { execFile } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { ZodError } from "zod";
+import { pathExists, readJsonFile, writeJsonAtomic } from "./atomicFs.js";
 import { computeSemanticDiff, type SemanticDiff } from "./diff.js";
 import {
   ConcurrencyConflictError,
-  DesignError,
   LockViolationError,
   NotFoundError,
   ValidationError,
 } from "./errors.js";
+import { withFileLock } from "./fileLock.js";
+
+export { writeJsonAtomic };
 import {
   applyViewPatch,
   checkLockViolations,
@@ -151,26 +154,6 @@ export {
   isThreadWaitingOnHuman,
 };
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    return code !== "ESRCH";
-  }
-}
-
 /**
  * Walks upward from `startDir` looking for `.design/` first, then `.git/`,
  * falling back to `path.resolve(startDir)` if neither exists.
@@ -199,76 +182,6 @@ export async function findProjectRoot(startDir: string): Promise<string> {
   }
 
   return start;
-}
-
-/**
- * Atomically writes formatted JSON via a temporary file in the same directory,
- * `fsync`, close, and `rename`.
- */
-export async function writeJsonAtomic(
-  filePath: string,
-  data: unknown,
-): Promise<void> {
-  const dir = path.dirname(filePath);
-  await fs.mkdir(dir, { recursive: true });
-  const tmpPath = path.join(
-    dir,
-    `.tmp-${process.pid}-${Date.now()}-${randomUUID()}.json`,
-  );
-  const payload = `${JSON.stringify(data, null, 2)}\n`;
-
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(tmpPath, "w", 0o644);
-    await handle.writeFile(payload, "utf8");
-    await handle.sync();
-    await handle.close();
-    handle = undefined;
-    await fs.rename(tmpPath, filePath);
-  } catch (err) {
-    if (handle) {
-      await handle.close().catch(() => {});
-    }
-    await fs.unlink(tmpPath).catch(() => {});
-    throw err;
-  }
-}
-
-async function readJsonFile<T>(
-  filePath: string,
-  schema: { parse: (v: unknown) => T },
-  label: string,
-): Promise<T> {
-  let raw: string;
-  try {
-    raw = await fs.readFile(filePath, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new NotFoundError(`${label} not found at ${filePath}`);
-    }
-    throw err;
-  }
-
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(raw);
-  } catch (err) {
-    throw new ValidationError(
-      `Invalid JSON in ${label} (${filePath}): ${(err as Error).message}`,
-    );
-  }
-
-  try {
-    return schema.parse(parsedJson);
-  } catch (err) {
-    if (err instanceof ZodError) {
-      throw new ValidationError(
-        `Invalid schema in ${label} (${filePath}): ${err.message}`,
-        err.issues,
-      );
-    }
-    throw err;
-  }
 }
 
 export class DesignStorage {
@@ -335,103 +248,10 @@ export class DesignStorage {
    * stale-lock recovery before running `fn`. Never nest `withLock` calls.
    */
   async withLock<T>(fn: () => Promise<T>): Promise<T> {
-    await fs.mkdir(this.designDir, { recursive: true });
-    const token = randomUUID();
-    const lockPayload = JSON.stringify({
-      pid: process.pid,
-      created_at: Date.now(),
-      token,
+    return withFileLock(this.lockPath, fn, {
+      lockTimeoutMs: this.lockTimeoutMs,
+      staleLockMs: this.staleLockMs,
     });
-    const deadline = Date.now() + this.lockTimeoutMs;
-
-    while (true) {
-      let handle: fs.FileHandle | undefined;
-      try {
-        handle = await fs.open(this.lockPath, "wx", 0o644);
-        await handle.writeFile(lockPayload, "utf8");
-        await handle.close();
-        handle = undefined;
-        break;
-      } catch (err) {
-        if (handle) {
-          await handle.close().catch(() => {});
-        }
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== "EEXIST") {
-          throw err;
-        }
-
-        const clearedStale = await this.tryClearStaleLock();
-        if (clearedStale) {
-          continue;
-        }
-
-        if (Date.now() >= deadline) {
-          throw new DesignError(
-            "LOCK_TIMEOUT",
-            `Timed out waiting for .design lock after ${this.lockTimeoutMs}ms`,
-          );
-        }
-
-        const waitMs = 15 + Math.floor(Math.random() * 20);
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-      }
-    }
-
-    try {
-      return await fn();
-    } finally {
-      try {
-        const current = await fs.readFile(this.lockPath, "utf8");
-        const parsed = JSON.parse(current) as { token?: string };
-        if (parsed.token === token) {
-          await fs.unlink(this.lockPath).catch(() => {});
-        }
-      } catch {
-        // Lock was already removed or unreadable
-      }
-    }
-  }
-
-  private async tryClearStaleLock(): Promise<boolean> {
-    try {
-      const [stat, raw] = await Promise.all([
-        fs.stat(this.lockPath),
-        fs.readFile(this.lockPath, "utf8"),
-      ]);
-      const ageMs = Date.now() - stat.mtimeMs;
-      let parsed: { pid?: number; created_at?: number } | undefined;
-      try {
-        parsed = JSON.parse(raw) as { pid?: number; created_at?: number };
-      } catch {
-        // Malformed lock payload counts as stale once slightly aged
-        if (ageMs > 250) {
-          await fs.unlink(this.lockPath).catch(() => {});
-          return true;
-        }
-        return false;
-      }
-
-      const createdAge =
-        typeof parsed.created_at === "number"
-          ? Date.now() - parsed.created_at
-          : ageMs;
-      const deadOwner =
-        typeof parsed.pid === "number" &&
-        parsed.pid !== process.pid &&
-        !isProcessAlive(parsed.pid);
-
-      if (deadOwner || ageMs > this.staleLockMs || createdAge > this.staleLockMs) {
-        await fs.unlink(this.lockPath).catch(() => {});
-        return true;
-      }
-      return false;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return true;
-      }
-      return false;
-    }
   }
 
   async initWorkspace(projectName?: string): Promise<WorkspaceFile> {

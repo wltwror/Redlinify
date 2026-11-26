@@ -162,6 +162,27 @@ Resolved architectural threads move cleanly into the searchable **Decision Log**
 
 Requires **Node.js >= 22.12.0** and **Git**.
 
+### Option 1: Zero-Install via `npx` / `npm` *(published starting `v0.3.0`)*
+
+Add Redlinify directly to **Claude Code**, **Cursor**, **OpenCode**, or any MCP client—no global clone required:
+
+```json
+{
+  "mcpServers": {
+    "redlinify": {
+      "command": "npx",
+      "args": ["-y", "redlinify", "mcp"]
+    }
+  }
+}
+```
+
+```bash
+npm install -g redlinify   # Optional global install (`redlinify mcp`, `redlinify ui`, `redlinify init`)
+```
+
+### Option 2: Self-Updating Source Install (`curl` / PowerShell)
+
 **macOS / Linux / WSL:**
 
 ```bash
@@ -174,9 +195,7 @@ curl -fsSL https://raw.githubusercontent.com/wltwror/Redlinify/main/scripts/inst
 irm https://raw.githubusercontent.com/wltwror/Redlinify/main/scripts/install.ps1 | iex
 ```
 
-The installer clones Redlinify into `~/.redlinify`, builds all packages, and links `redlinify` cleanly (falling back to `~/.local/bin/redlinify` without `sudo` if global `npm link` is restricted).
-
-Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP client—no manual `init` or UI terminal required:
+The installer clones Redlinify into `~/.redlinify`, builds all packages, and links `redlinify` cleanly (falling back to `~/.local/bin/redlinify` without `sudo` if global `npm link` is restricted). With the Git-clone install:
 
 ```json
 {
@@ -189,13 +208,13 @@ Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP clie
 }
 ```
 
-* Built-in MCP instructions teach your agent how to draft views, pin questions, respect violet locks, and resolve decisions automatically.
-* On the first diagram write in any Git repo, Redlinify initializes `.design/` and spawns the detached loopback UI daemon (`127.0.0.1:4173`), returning `ui_url`.
-
 ```bash
 redlinify update          # Pull latest changes, install deps if changed, rebuild & refresh active UI
 redlinify update --check  # Preview available updates without modifying your local setup
 ```
+
+* Built-in MCP instructions teach your agent how to draft views, pin questions, respect violet locks, and resolve decisions automatically.
+* On the first diagram write in any Git repo, Redlinify initializes `.design/` and spawns the detached loopback UI daemon (`127.0.0.1:4173`), returning `ui_url`.
 
 <details>
 <summary>Manual install, setup without global link, &amp; CLI commands</summary>
@@ -222,6 +241,7 @@ redlinify mcp --open --dir /path/to/repo   # Start MCP + auto-open browser immed
 redlinify mcp --no-ui --dir /path/to/repo  # Headless MCP without auto-starting the UI
 redlinify ui --open --dir /path/to/repo    # Launch workbench UI standalone
 redlinify ui --open --dir examples/coffee-shop # Try the standalone Coffee Shop sandbox
+redlinify ui --open --dir examples/fleet-er    # Try the standalone Fleet ER sandbox
 redlinify stop --dir /path/to/repo         # Stop the detached UI daemon
 redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 redlinify update                           # Self-update clone, rebuild & restart active UI (or `npm run update`)
@@ -278,10 +298,11 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | Cycle tabs | `Tab` / `Shift+Tab` |
 | Quick search / jump | `Ctrl+K` / `Cmd+K` or `/` (typo-tolerant fuzzy search across views, boxes, attributes, edges & threads) |
 | Export active diagram | Top-right `Export` button (`PNG 2× HD`, `SVG`, `Mermaid .mmd`, `Copy Mermaid`, `JSON`) |
-| Quick actions menu | Right-click canvas, tab, card, or edge |
-| Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) |
+| Quick actions menu | Right-click canvas (`Add Box Here`, `Add Shape…`), tab, card, or edge (`Change Shape…`) |
+| Canvas editing toolbar | Floating bottom-center Canvas Dock (`+ ▾` quick-add & shape picker, `Undo`/`Redo`, `TB`/`LR` direction, `Auto-Layout`) |
+| Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) or Canvas Dock buttons |
 | Delete selected unlocked elements | `Delete` or `Backspace` |
-| Theme & canvas style | Top-right Dots/Grid and Sun/Moon (Dark/Light) toggles |
+| Theme, grid & scroll preferences | Top-right Dots/Grid and Sun/Moon toggles + bottom-left `Scroll: Pan \| Zoom` (persisted globally in `~/.redlinify/preferences.json`) |
 
 </details>
 
@@ -294,11 +315,13 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 npm run typecheck   # Type-check all workspace packages in topological order
 npm run build       # Build @redlinify/shared, @redlinify/server, and @redlinify/ui
 npm test            # Run Vitest unit & integration suites
+npm run test:e2e    # Run Playwright headless Chromium E2E checks
 ```
 
 * `packages/shared` (`@redlinify/shared`): Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, and locked atomic storage (`@redlinify/shared/browser` for UI).
 * `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`, `update`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
-* `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
+* `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench (`exportDiagram.ts` SVG/PNG + `exportMermaid.ts`).
+* `examples/coffee-shop/` & `examples/fleet-er/`: Standalone General & Crow's Foot ER sample `.design/` workspaces.
 
 See [docs/SPEC.md](docs/SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for engineering invariants.
 

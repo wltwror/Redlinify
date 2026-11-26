@@ -15,8 +15,10 @@ import {
   type DesignNode,
   type DesignView,
   type EntityField,
+  type NodeShape,
   type NodeStatus,
 } from "@redlinify/shared/browser";
+import { NODE_SHAPE_OPTIONS } from "../../layout/elk";
 
 const STATUS_OPTIONS: NodeStatus[] = [
   "draft",
@@ -86,6 +88,49 @@ export function NodeSpecTab({
           {nodeDraft.locked ? "Unlock" : "Lock"}
         </button>
       </div>
+
+      {(activeView?.diagram_type ?? "general") !== "er" &&
+        (nodeDraft.fields?.length ?? 0) === 0 && (
+          <div>
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+              Shape
+            </label>
+            <div
+              role="group"
+              aria-label="Node shape"
+              className="grid grid-cols-4 gap-1"
+            >
+              {NODE_SHAPE_OPTIONS.map((opt) => {
+                const active = (nodeDraft.shape ?? "card") === opt.shape;
+                return (
+                  <button
+                    key={opt.shape}
+                    type="button"
+                    disabled={nodeDraft.locked}
+                    aria-pressed={active}
+                    title={opt.hint}
+                    onClick={() => {
+                      const next: DesignNode = { ...nodeDraft };
+                      if (opt.shape === "card") {
+                        delete next.shape;
+                      } else {
+                        next.shape = opt.shape as NodeShape;
+                      }
+                      void commitNode(next);
+                    }}
+                    className={`rounded-md border px-1.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                      active
+                        ? "border-sky-500/60 bg-sky-500/20 text-sky-300"
+                        : "border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800"
+                    }`}
+                  >
+                    {opt.shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       <div className="grid grid-cols-2 gap-2.5">
         <div>

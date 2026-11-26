@@ -55,6 +55,7 @@ import {
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
 } from "../utils/viewportNavigation";
+import { CanvasDock } from "./CanvasDock";
 import { CommandSearchModal } from "./CommandSearchModal";
 import { ContextMenu } from "./ContextMenu";
 import { EdgeCreateModal } from "./EdgeCreateModal";
@@ -118,11 +119,13 @@ function WorkbenchInner() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
+  const [appliedLayoutVersion, setAppliedLayoutVersion] = useState(0);
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
   const viewportReadyRef = useRef(false);
+  const viewportSyncTokenRef = useRef(0);
   const activeViewIdRef = useRef<string | null>(null);
   const activeViewRef = useRef<DesignView | null>(null);
   const lastSyncedNodesViewIdRef = useRef<string | null>(null);
@@ -161,6 +164,7 @@ function WorkbenchInner() {
     conflictBanner,
     layoutVersion,
     setLayoutVersion,
+    pendingViewportSyncRef,
     routingTick,
     setRoutingTick,
     loadWorkspaceMeta,
@@ -174,8 +178,6 @@ function WorkbenchInner() {
     positionsRef,
     edgeRoutesRef,
     viewportReadyRef,
-    fitView,
-    setViewport,
     getViewport,
     pushHistoryEntry,
     showToast,
@@ -272,6 +274,7 @@ function WorkbenchInner() {
     handleCommitWaypoints,
     handleUpdateEdgeRoute,
     createBoxAtPosition,
+    handleChangeNodeShape,
     handleAutoLayout,
     handleToggleDirection,
     snapshotDragOrigin,
@@ -338,6 +341,7 @@ function WorkbenchInner() {
     selectSingleNode,
     selectSingleEdge,
     createBoxAtPosition,
+    handleChangeNodeShape,
     handleAutoLayout,
     handleToggleDirection,
     handleUndo,
@@ -589,6 +593,7 @@ function WorkbenchInner() {
     if (!activeView) {
       lastSyncedNodesViewIdRef.current = null;
       setRfNodes([]);
+      setAppliedLayoutVersion(layoutVersion);
       return;
     }
 
@@ -652,6 +657,7 @@ function WorkbenchInner() {
         };
       });
     });
+    setAppliedLayoutVersion(layoutVersion);
   }, [
     activeView,
     allThreads,
@@ -668,6 +674,34 @@ function WorkbenchInner() {
     layoutVersion,
     pulsingNodeId,
     setRfNodes,
+  ]);
+
+  // Execute pending viewport fit/restore strictly after StoreUpdater commits updated rfNodes
+  useEffect(() => {
+    const pending = pendingViewportSyncRef.current;
+    if (!pending || appliedLayoutVersion < pending.layoutVersion) {
+      return;
+    }
+    pendingViewportSyncRef.current = null;
+    const token = ++viewportSyncTokenRef.current;
+    const action =
+      pending.kind === "restore"
+        ? setViewport(pending.viewport, { duration: 150 })
+        : fitView({ padding: 0.16, maxZoom: 1.05, duration: 180 });
+    void Promise.resolve(action).finally(() => {
+      setTimeout(() => {
+        if (viewportSyncTokenRef.current === token) {
+          viewportReadyRef.current = true;
+        }
+      }, 80);
+    });
+  }, [
+    appliedLayoutVersion,
+    fitView,
+    pendingViewportSyncRef,
+    rfNodes,
+    setViewport,
+    viewportReadyRef,
   ]);
 
   // Sync DesignView + smart routing -> React Flow edges (runs smoothly on drag too!)
@@ -899,16 +933,7 @@ function WorkbenchInner() {
         filter={filter}
         onChangeFilter={setFilter}
         hasActiveView={Boolean(activeView)}
-        diagramType={activeView?.diagram_type ?? "general"}
-        direction={activeView?.direction ?? "TB"}
-        onToggleDirection={() => void handleToggleDirection()}
-        onAddBox={() => void createBoxAtPosition()}
-        onAutoLayout={() => void handleAutoLayout()}
         onExport={(format) => void handleExportDiagram(format)}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={() => void handleUndo()}
-        onRedo={() => void handleRedo()}
         openQuestionsCount={openQuestionsCount}
         pendingAgentCount={pendingAgentCount}
         decisionsCount={decisionsCount}
@@ -1038,6 +1063,20 @@ function WorkbenchInner() {
           )}
 
           {activeView && (
+            <CanvasDock
+              diagramType={activeView.diagram_type ?? "general"}
+              direction={activeView.direction ?? "TB"}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onAddBox={(shape) => void createBoxAtPosition(undefined, shape)}
+              onUndo={() => void handleUndo()}
+              onRedo={() => void handleRedo()}
+              onToggleDirection={() => void handleToggleDirection()}
+              onAutoLayout={() => void handleAutoLayout()}
+            />
+          )}
+
+          {activeView && (
             <div
               role="group"
               aria-label="Scroll wheel behavior"
@@ -1085,7 +1124,7 @@ function WorkbenchInner() {
 
           {toast && (
             <div
-              className={`pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-3.5 py-2 text-xs font-medium shadow-xl ${
+              className={`pointer-events-none fixed bottom-16 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-3.5 py-2 text-xs font-medium shadow-xl ${
                 toast.tone === "error"
                   ? "border-rose-500/50 bg-rose-950/90 text-rose-100"
                   : toast.tone === "warning"

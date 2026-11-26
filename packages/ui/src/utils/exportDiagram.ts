@@ -12,6 +12,8 @@ import {
   MAX_VISIBLE_ER_FIELDS,
   MAX_VISIBLE_SECTION_ITEMS,
   estimateNodeSize,
+  getCollapsedVisibleCount,
+  getEffectiveNodeShape,
 } from "../layout/elk";
 import { computeSmartEdgeRouting, type Point } from "../layout/routing";
 
@@ -442,6 +444,96 @@ function fieldBadgesList(field: EntityField): Array<{
   return list;
 }
 
+function renderDecisionNodeSvg(
+  node: DesignNode,
+  rect: { x: number; y: number; width: number; height: number },
+  palette: Palette,
+  isDark: boolean,
+  borderColor: string,
+  strokeWidth: number,
+  clipId: string,
+): string {
+  const { x, y, width, height } = rect;
+  const statusMeta = STATUS_STYLE[node.status];
+  const cx = width / 2;
+  const cy = height / 2;
+  const pts = `${cx},1 ${width - 1},${cy} ${cx},${height - 1} 1,${cy}`;
+  const out: string[] = [
+    `<g transform="translate(${x}, ${y})">`,
+    `<defs><clipPath id="${clipId}"><polygon points="${pts}" /></clipPath></defs>`,
+    `<polygon points="${pts}" fill="${palette.cardBg}" stroke="${borderColor}" stroke-width="${strokeWidth}" stroke-linejoin="round" />`,
+    `<g clip-path="url(#${clipId})">`,
+    `<text x="${cx}" y="${Math.round(height * 0.27)}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" font-weight="700" fill="${isDark ? "#7dd3fc" : "#0369a1"}">${escXml(truncateText(node.kind.toUpperCase(), 16))}</text>`,
+    `<text x="${cx}" y="${Math.round(height * 0.49)}" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="700" fill="${palette.textPrimary}">${escXml(truncateText(node.title, 24))}</text>`,
+  ];
+
+  if (node.summary?.trim()) {
+    out.push(
+      `<text x="${cx}" y="${Math.round(height * 0.64)}" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="${palette.textMuted}">${escXml(truncateText(node.summary.trim(), 28))}</text>`,
+    );
+  }
+
+  const badgeW = Math.max(44, statusMeta.label.length * 5.6 + 14);
+  const badgeY = Math.round(height * 0.75);
+  out.push(
+    `<rect x="${cx - badgeW / 2}" y="${badgeY}" width="${badgeW}" height="17" rx="8.5" fill="${isDark ? statusMeta.darkBg : statusMeta.lightBg}" stroke="${isDark ? statusMeta.darkBorder : statusMeta.lightBorder}" stroke-width="1" />`,
+    `<text x="${cx}" y="${badgeY + 12}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="600" fill="${isDark ? statusMeta.darkText : statusMeta.lightText}">${escXml(statusMeta.label)}</text>`,
+    `</g></g>`,
+  );
+  return out.join("\n");
+}
+
+function renderTerminalNodeSvg(
+  node: DesignNode,
+  rect: { x: number; y: number; width: number; height: number },
+  palette: Palette,
+  isDark: boolean,
+  borderColor: string,
+  strokeWidth: number,
+  clipId: string,
+): string {
+  const { x, y, width, height } = rect;
+  const statusMeta = STATUS_STYLE[node.status];
+  const rx = (height / 2).toFixed(1);
+  const cx = width / 2;
+  const kindText = node.kind.toUpperCase();
+  const statusPillW = Math.max(44, statusMeta.label.length * 5.8 + 12);
+  const kindPillW = Math.max(40, kindText.length * 6 + 12);
+  const totalTopW = kindPillW + 6 + statusPillW + (node.locked ? 24 : 0);
+  const topStartX = cx - totalTopW / 2;
+
+  const out: string[] = [
+    `<g transform="translate(${x}, ${y})">`,
+    `<defs><clipPath id="${clipId}"><rect x="0" y="0" width="${width}" height="${height}" rx="${rx}" /></clipPath></defs>`,
+    `<rect x="0" y="0" width="${width}" height="${height}" rx="${rx}" fill="${palette.cardBg}" stroke="${borderColor}" stroke-width="${strokeWidth}" />`,
+    `<g clip-path="url(#${clipId})">`,
+    `<rect x="${topStartX}" y="9" width="${kindPillW}" height="18" rx="5" fill="${palette.badgeBg}" stroke="${palette.badgeBorder}" stroke-width="1" />`,
+    `<text x="${topStartX + kindPillW / 2}" y="21.5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9.5" font-weight="700" fill="${isDark ? "#7dd3fc" : "#0369a1"}">${escXml(truncateText(kindText, 16))}</text>`,
+    `<rect x="${topStartX + kindPillW + 6}" y="9" width="${statusPillW}" height="18" rx="9" fill="${isDark ? statusMeta.darkBg : statusMeta.lightBg}" stroke="${isDark ? statusMeta.darkBorder : statusMeta.lightBorder}" stroke-width="1" />`,
+    `<text x="${topStartX + kindPillW + 6 + statusPillW / 2}" y="21.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600" fill="${isDark ? statusMeta.darkText : statusMeta.lightText}">${escXml(statusMeta.label)}</text>`,
+  ];
+
+  if (node.locked) {
+    const lx = topStartX + kindPillW + 6 + statusPillW + 6;
+    out.push(
+      `<rect x="${lx}" y="9" width="18" height="18" rx="5" fill="${isDark ? "#2e1065" : "#ede9fe"}" stroke="${palette.borderLocked}" stroke-width="1" />`,
+      `<text x="${lx + 9}" y="21.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" fill="${palette.borderLocked}">L</text>`,
+    );
+  }
+
+  out.push(
+    `<text x="${cx}" y="47" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="700" fill="${palette.textPrimary}">${escXml(truncateText(node.title, 28))}</text>`,
+  );
+  if (node.summary?.trim()) {
+    out.push(
+      `<text x="${cx}" y="64" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" fill="${palette.textMuted}">${escXml(truncateText(node.summary.trim(), 34))}</text>`,
+    );
+  }
+
+  out.push("</g></g>");
+  return out.join("\n");
+}
+
 function renderNodeSvg(
   node: DesignNode,
   rect: { x: number; y: number; width: number; height: number },
@@ -453,6 +545,7 @@ function renderNodeSvg(
   const clipId = `clip-${node.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const isErNode =
     diagramType === "er" || (node.fields && node.fields.length > 0);
+  const shape = getEffectiveNodeShape(node, diagramType);
   const statusMeta = STATUS_STYLE[node.status];
   const borderColor =
     node.status === "drifted"
@@ -464,46 +557,90 @@ function renderNodeSvg(
           : palette.borderDefault;
   const strokeWidth = node.locked || node.status !== "draft" ? 1.8 : 1.25;
 
+  if (shape === "decision") {
+    return renderDecisionNodeSvg(
+      node,
+      rect,
+      palette,
+      isDark,
+      borderColor,
+      strokeWidth,
+      clipId,
+    );
+  }
+  if (shape === "terminal") {
+    return renderTerminalNodeSvg(
+      node,
+      rect,
+      palette,
+      isDark,
+      borderColor,
+      strokeWidth,
+      clipId,
+    );
+  }
+
+  const isStore = shape === "store";
+  const topPad = isStore ? 22 : 0;
+  const bottomPad = isStore ? 12 : 0;
+  const capRy = 10;
+  const capCy = 11;
+  const cylRx = width / 2;
+
   const out: string[] = [];
   out.push(`<g transform="translate(${x}, ${y})">`);
-  out.push(
-    `<defs><clipPath id="${clipId}"><rect x="0" y="0" width="${width}" height="${height}" rx="12" /></clipPath></defs>`,
-  );
-  out.push(
-    `<rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="${palette.cardBg}" stroke="${borderColor}" stroke-width="${strokeWidth}" />`,
-  );
+  if (isStore) {
+    const cylPath = `M 0 ${capCy} L 0 ${height - capCy} A ${cylRx} ${capRy} 0 0 0 ${width} ${height - capCy} L ${width} ${capCy} Z`;
+    const clipPath = `M 0 ${capCy} A ${cylRx} ${capRy} 0 0 1 ${width} ${capCy} L ${width} ${height - capCy} A ${cylRx} ${capRy} 0 0 1 0 ${height - capCy} Z`;
+    out.push(
+      `<defs><clipPath id="${clipId}"><path d="${clipPath}" /></clipPath></defs>`,
+      `<path d="${cylPath}" fill="${palette.cardBg}" stroke="${borderColor}" stroke-width="${strokeWidth}" />`,
+      `<ellipse cx="${cylRx}" cy="${capCy}" rx="${cylRx}" ry="${capRy}" fill="${palette.headerBg}" stroke="${borderColor}" stroke-width="${strokeWidth}" />`,
+    );
+  } else {
+    out.push(
+      `<defs><clipPath id="${clipId}"><rect x="0" y="0" width="${width}" height="${height}" rx="12" /></clipPath></defs>`,
+    );
+    out.push(
+      `<rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="${palette.cardBg}" stroke="${borderColor}" stroke-width="${strokeWidth}" />`,
+    );
+  }
   out.push(`<g clip-path="url(#${clipId})">`);
 
   // Header bar
   const headerH = 34;
+  if (!isStore) {
+    out.push(
+      `<rect x="0" y="0" width="${width}" height="${headerH}" fill="${palette.headerBg}" />`,
+    );
+  }
   out.push(
-    `<rect x="0" y="0" width="${width}" height="${headerH}" fill="${palette.headerBg}" />`,
-    `<line x1="0" y1="${headerH}" x2="${width}" y2="${headerH}" stroke="${palette.divider}" stroke-width="1" />`,
+    `<line x1="0" y1="${topPad + headerH}" x2="${width}" y2="${topPad + headerH}" stroke="${palette.divider}" stroke-width="1" />`,
   );
 
   const kindText = node.kind.toUpperCase();
   const kindPillW = Math.min(width - 110, Math.max(42, kindText.length * 6.5 + 16));
   out.push(
-    `<rect x="10" y="7" width="${kindPillW}" height="20" rx="5" fill="${palette.badgeBg}" stroke="${palette.badgeBorder}" stroke-width="1" />`,
-    `<text x="${10 + kindPillW / 2}" y="20.5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="700" fill="${isDark ? "#7dd3fc" : "#0369a1"}">${escXml(truncateText(kindText, 18))}</text>`,
+    `<rect x="10" y="${topPad + 7}" width="${kindPillW}" height="20" rx="5" fill="${palette.badgeBg}" stroke="${palette.badgeBorder}" stroke-width="1" />`,
+    `<text x="${10 + kindPillW / 2}" y="${topPad + 20.5}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" font-weight="700" fill="${isDark ? "#7dd3fc" : "#0369a1"}">${escXml(truncateText(kindText, 18))}</text>`,
   );
 
   const statusPillW = Math.max(46, statusMeta.label.length * 6 + 14);
   const statusX = 10 + kindPillW + 6;
   out.push(
-    `<rect x="${statusX}" y="7" width="${statusPillW}" height="20" rx="10" fill="${isDark ? statusMeta.darkBg : statusMeta.lightBg}" stroke="${isDark ? statusMeta.darkBorder : statusMeta.lightBorder}" stroke-width="1" />`,
-    `<text x="${statusX + statusPillW / 2}" y="20.5" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="600" fill="${isDark ? statusMeta.darkText : statusMeta.lightText}">${escXml(statusMeta.label)}</text>`,
+    `<rect x="${statusX}" y="${topPad + 7}" width="${statusPillW}" height="20" rx="10" fill="${isDark ? statusMeta.darkBg : statusMeta.lightBg}" stroke="${isDark ? statusMeta.darkBorder : statusMeta.lightBorder}" stroke-width="1" />`,
+    `<text x="${statusX + statusPillW / 2}" y="${topPad + 20.5}" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="600" fill="${isDark ? statusMeta.darkText : statusMeta.lightText}">${escXml(statusMeta.label)}</text>`,
   );
 
   if (node.locked) {
     const lockPillX = width - 30;
     out.push(
-      `<rect x="${lockPillX}" y="7" width="20" height="20" rx="5" fill="${isDark ? "#2e1065" : "#ede9fe"}" stroke="${palette.borderLocked}" stroke-width="1" />`,
-      `<text x="${lockPillX + 10}" y="20.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="${palette.borderLocked}">L</text>`,
+      `<rect x="${lockPillX}" y="${topPad + 7}" width="20" height="20" rx="5" fill="${isDark ? "#2e1065" : "#ede9fe"}" stroke="${palette.borderLocked}" stroke-width="1" />`,
+      `<text x="${lockPillX + 10}" y="${topPad + 20.5}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="${palette.borderLocked}">L</text>`,
     );
   }
 
-  let curY = headerH + 18;
+  let curY = topPad + headerH + 18;
   const maxTitleChars = Math.max(16, Math.floor((width - 24) / 7.8));
   out.push(
     `<text x="12" y="${curY}" font-family="system-ui, -apple-system, sans-serif" font-size="13.5" font-weight="700" fill="${palette.textPrimary}">${escXml(truncateText(node.title, maxTitleChars))}</text>`,
@@ -529,7 +666,7 @@ function renderNodeSvg(
   const hasFooter = Boolean(
     node.entity_ref || (node.code_refs && node.code_refs.length > 0),
   );
-  const contentLimitY = height - (hasFooter ? 28 : 8);
+  const contentLimitY = height - bottomPad - (hasFooter ? 28 : 8);
 
   // ER fields block
   const fields = node.fields ?? [];
@@ -550,7 +687,11 @@ function renderNodeSvg(
       );
       curY += 18;
     } else {
-      const visible = fields.slice(0, MAX_VISIBLE_ER_FIELDS);
+      const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+        fields.length,
+        MAX_VISIBLE_ER_FIELDS,
+      );
+      const visible = fields.slice(0, visibleCount);
       for (const f of visible) {
         if (curY + 8 > contentLimitY) break;
         const nullMark = f.nullable ? "○" : "*";
@@ -581,9 +722,9 @@ function renderNodeSvg(
         );
         curY += 20;
       }
-      if (fields.length > MAX_VISIBLE_ER_FIELDS && curY + 4 <= contentLimitY) {
+      if (hiddenCount > 0 && curY + 4 <= contentLimitY) {
         out.push(
-          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${fields.length - MAX_VISIBLE_ER_FIELDS} more</text>`,
+          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${hiddenCount} more</text>`,
         );
         curY += 16;
       }
@@ -609,7 +750,11 @@ function renderNodeSvg(
       );
       curY += 16;
     } else {
-      const visibleItems = sec.items.slice(0, MAX_VISIBLE_SECTION_ITEMS);
+      const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+        sec.items.length,
+        MAX_VISIBLE_SECTION_ITEMS,
+      );
+      const visibleItems = sec.items.slice(0, visibleCount);
       const maxItemChars = Math.max(18, Math.floor((width - 28) / 6.5));
       for (const item of visibleItems) {
         if (curY + 4 > contentLimitY) break;
@@ -618,9 +763,9 @@ function renderNodeSvg(
         );
         curY += 17;
       }
-      if (sec.items.length > MAX_VISIBLE_SECTION_ITEMS && curY + 4 <= contentLimitY) {
+      if (hiddenCount > 0 && curY + 4 <= contentLimitY) {
         out.push(
-          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${sec.items.length - MAX_VISIBLE_SECTION_ITEMS} more</text>`,
+          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${hiddenCount} more</text>`,
         );
         curY += 15;
       }
@@ -629,9 +774,11 @@ function renderNodeSvg(
 
   // Footer
   if (hasFooter) {
-    const footerY = height - 24;
+    const footerY = height - bottomPad - 24;
     out.push(
-      `<rect x="0" y="${footerY}" width="${width}" height="24" fill="${palette.footerBg}" />`,
+      ...(isStore
+        ? []
+        : [`<rect x="0" y="${footerY}" width="${width}" height="24" fill="${palette.footerBg}" />`]),
       `<line x1="0" y1="${footerY}" x2="${width}" y2="${footerY}" stroke="${palette.divider}" stroke-width="1" />`,
     );
     if (node.entity_ref) {
@@ -1001,246 +1148,7 @@ export function svgToPngBlob(
   });
 }
 
-function toMermaidId(raw: string): string {
-  const cleaned = raw.replace(/[^a-zA-Z0-9_]/g, "_");
-  return /^[0-9]/.test(cleaned) || !cleaned ? `n_${cleaned}` : cleaned;
-}
-
-function erLeftCard(c?: Cardinality): string {
-  switch (c) {
-    case "0..1":
-      return "|o";
-    case "1..*":
-      return "}|";
-    case "0..*":
-      return "}o";
-    case "1":
-    default:
-      return "||";
-  }
-}
-
-function erRightCard(c?: Cardinality): string {
-  switch (c) {
-    case "0..1":
-      return "o|";
-    case "1..*":
-      return "|{";
-    case "0..*":
-      return "o{";
-    case "1":
-    default:
-      return "||";
-  }
-}
-
-function escMermaidHtml(input: string): string {
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/#/g, "&#35;")
-    .replace(/\|/g, "&#124;");
-}
-
-type MermaidStyleClass =
-  | "drifted"
-  | "needs_input"
-  | "locked"
-  | "approved"
-  | "implemented"
-  | "draft";
-
-const MERMAID_CLASS_ORDER: MermaidStyleClass[] = [
-  "drifted",
-  "needs_input",
-  "locked",
-  "approved",
-  "implemented",
-  "draft",
-];
-
-const MERMAID_CLASS_DEFS: Record<
-  "dark" | "light",
-  Record<MermaidStyleClass, string>
-> = {
-  dark: {
-    drifted: "fill:#4c0519,stroke:#f43f5e,stroke-width:2px,color:#ffe4e6",
-    needs_input: "fill:#451a03,stroke:#f59e0b,stroke-width:2px,color:#fef3c7",
-    locked: "fill:#1e1b4b,stroke:#8b5cf6,stroke-width:2px,color:#f1f5f9",
-    approved: "fill:#022c22,stroke:#10b981,stroke-width:1.5px,color:#d1fae5",
-    implemented: "fill:#042f2e,stroke:#14b8a6,stroke-width:1.5px,color:#ccfbf1",
-    draft: "fill:#0f172a,stroke:#475569,stroke-width:1.5px,color:#f1f5f9",
-  },
-  light: {
-    drifted: "fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#881337",
-    needs_input: "fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f",
-    locked: "fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#1e293b",
-    approved: "fill:#d1fae5,stroke:#059669,stroke-width:1.5px,color:#064e3b",
-    implemented: "fill:#ccfbf1,stroke:#0d9488,stroke-width:1.5px,color:#134e4a",
-    draft: "fill:#ffffff,stroke:#94a3b8,stroke-width:1.5px,color:#0f172a",
-  },
-};
-
-function mermaidClassForNode(node: DesignNode): MermaidStyleClass {
-  if (node.status === "drifted") return "drifted";
-  if (node.status === "needs_input") return "needs_input";
-  if (node.locked) return "locked";
-  if (node.status === "approved") return "approved";
-  if (node.status === "implemented") return "implemented";
-  return "draft";
-}
-
-function formatMermaidNodeShape(
-  mId: string,
-  node: DesignNode,
-  innerHtml: string,
-): string {
-  if (node.sections.length === 0) {
-    if (/(store|storage|db|database|cache|queue)/i.test(node.kind)) {
-      return `  ${mId}[("${innerHtml}")]`;
-    }
-    if (/(actor|user|client)/i.test(node.kind)) {
-      return `  ${mId}(["${innerHtml}"])`;
-    }
-  }
-  return `  ${mId}("${innerHtml}")`;
-}
-
-export function renderViewToMermaid(
-  view: DesignView,
-  options?: { theme?: "dark" | "light" },
-): string {
-  if (view.diagram_type === "er") {
-    const lines: string[] = ["erDiagram"];
-    for (const node of view.nodes) {
-      const entityId = toMermaidId(node.id);
-      const safeTitle = node.title.replace(/"/g, "'");
-      lines.push(`  ${entityId} ["${safeTitle}"] {`);
-      for (const f of node.fields ?? []) {
-        const fType = (f.type ?? "string").replace(/[^a-zA-Z0-9_]/g, "_");
-        const fName = f.name.replace(/[^a-zA-Z0-9_]/g, "_");
-        const keys = [f.pk ? "PK" : "", f.fk ? "FK" : "", f.unique ? "UK" : ""]
-          .filter(Boolean)
-          .join(",");
-        const notes = [f.nullable ? "nullable" : "NOT NULL", f.note ?? ""]
-          .filter(Boolean)
-          .join(" - ")
-          .replace(/"/g, "'");
-        lines.push(
-          `    ${fType} ${fName}${keys ? ` ${keys}` : ""} "${notes}"`,
-        );
-      }
-      lines.push("  }");
-    }
-    for (const edge of view.edges) {
-      const src = toMermaidId(edge.source);
-      const tgt = toMermaidId(edge.target);
-      const left = erLeftCard(edge.source_cardinality);
-      const right = erRightCard(edge.target_cardinality);
-      const rel = edge.style === "dashed" ? ".." : "--";
-      const label = (
-        edge.label?.trim() ||
-        (edge.relation_kind === "subtype" ? "is-a" : "relates")
-      ).replace(/"/g, "'");
-      lines.push(`  ${src} ${left}${rel}${right} ${tgt} : "${label}"`);
-    }
-    return `${lines.join("\n")}\n`;
-  }
-
-  const theme = options?.theme === "light" ? "light" : "dark";
-  const lines: string[] = [
-    "%%{init: {'flowchart': {'curve': 'basis', 'nodeSpacing': 48, 'rankSpacing': 64, 'padding': 14}}}%%",
-    `flowchart ${view.direction === "LR" ? "LR" : "TB"}`,
-    `  %% ${view.title.replace(/[\r\n]+/g, " ")}`,
-  ];
-
-  const nodesByClass = new Map<MermaidStyleClass, string[]>();
-
-  for (const node of view.nodes) {
-    const mId = toMermaidId(node.id);
-    const kindUpper = escMermaidHtml(node.kind.toUpperCase());
-    const statusSuffix =
-      node.status === "drifted"
-        ? " · DRIFTED"
-        : node.status === "needs_input"
-          ? " · NEEDS INPUT"
-          : node.locked
-            ? " · 🔒"
-            : "";
-
-    const parts: string[] = [
-      `<small>${kindUpper}${statusSuffix}</small>`,
-      `<b>${escMermaidHtml(node.title)}</b>`,
-    ];
-
-    if (node.summary?.trim()) {
-      parts.push(
-        `<i>${escMermaidHtml(truncateText(node.summary.trim(), 64))}</i>`,
-      );
-    }
-
-    for (const sec of node.sections) {
-      if (sec.items.length === 0) continue;
-      parts.push("", `<b>${escMermaidHtml(sec.heading)}</b>`);
-      for (const item of sec.items.slice(0, MAX_VISIBLE_SECTION_ITEMS)) {
-        parts.push(`• ${escMermaidHtml(truncateText(item, 44))}`);
-      }
-      if (sec.items.length > MAX_VISIBLE_SECTION_ITEMS) {
-        parts.push(
-          `<i>+${sec.items.length - MAX_VISIBLE_SECTION_ITEMS} more</i>`,
-        );
-      }
-    }
-
-    lines.push(formatMermaidNodeShape(mId, node, parts.join("<br/>")));
-
-    const cls = mermaidClassForNode(node);
-    const list = nodesByClass.get(cls) ?? [];
-    list.push(mId);
-    nodesByClass.set(cls, list);
-  }
-
-  if (view.nodes.length > 0 && view.edges.length > 0) {
-    lines.push("");
-  }
-
-  for (const edge of view.edges) {
-    const src = toMermaidId(edge.source);
-    const tgt = toMermaidId(edge.target);
-    const arrow =
-      edge.style === "dashed" ? "-.->" : edge.locked ? "==>" : "-->";
-    const text = [
-      edge.step !== undefined ? String(edge.step) : "",
-      edge.label?.trim() ?? "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    const escaped = escMermaidHtml(text);
-    lines.push(
-      escaped
-        ? `  ${src} ${arrow}|"${escaped}"| ${tgt}`
-        : `  ${src} ${arrow} ${tgt}`,
-    );
-  }
-
-  const styleLines: string[] = [];
-  for (const cls of MERMAID_CLASS_ORDER) {
-    const ids = nodesByClass.get(cls);
-    if (!ids || ids.length === 0) continue;
-    styleLines.push(`  classDef ${cls} ${MERMAID_CLASS_DEFS[theme][cls]}`);
-    styleLines.push(`  class ${ids.join(",")} ${cls}`);
-  }
-  if (view.edges.length > 0) {
-    styleLines.push("  linkStyle default stroke:#64748b,stroke-width:1.5px");
-  }
-  if (styleLines.length > 0) {
-    lines.push("", ...styleLines);
-  }
-
-  return `${lines.join("\n")}\n`;
-}
+export { renderViewToMermaid } from "./exportMermaid";
 
 export function renderViewToJson(view: DesignView): string {
   return `${JSON.stringify(view, null, 2)}\n`;

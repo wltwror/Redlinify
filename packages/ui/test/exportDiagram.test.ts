@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DesignView } from "@redlinify/shared/browser";
+import { getCollapsedVisibleCount } from "../src/layout/elk";
 import {
   renderViewToJson,
   renderViewToMermaid,
@@ -145,5 +146,131 @@ describe("exportDiagram", () => {
     const jsonText = renderViewToJson(generalView);
     expect(JSON.parse(jsonText)).toEqual(generalView);
     expect(jsonText).not.toContain("waypoints");
+  });
+
+  it("renders decision, terminal, and store node shapes in SVG and Mermaid export", () => {
+    const flowView: DesignView = {
+      id: "auth_flow",
+      title: "Auth Flowchart",
+      diagram_type: "general",
+      direction: "TB",
+      nodes: [
+        {
+          id: "start",
+          kind: "Terminal",
+          shape: "terminal",
+          title: "HTTP Request",
+          status: "approved",
+          locked: false,
+          sections: [],
+        },
+        {
+          id: "check",
+          kind: "Decision",
+          shape: "decision",
+          title: "Token Valid?",
+          status: "needs_input",
+          locked: false,
+          sections: [],
+        },
+        {
+          id: "sessions",
+          kind: "Cache",
+          shape: "store",
+          title: "Redis Sessions",
+          status: "draft",
+          locked: false,
+          sections: [
+            { id: "keys", heading: "Keys", items: ["sess:{id}"] },
+          ],
+        },
+      ],
+      edges: [
+        { id: "e1", source: "start", target: "check", label: "validate" },
+        { id: "e2", source: "check", target: "sessions", label: "lookup" },
+      ],
+    };
+
+    const svgRes = renderViewToSvg({
+      view: flowView,
+      positions: {
+        start: { x: 40, y: 20 },
+        check: { x: 40, y: 140 },
+        sessions: { x: 40, y: 320 },
+      },
+      theme: "dark",
+      bgPattern: "dots",
+    });
+    expect(svgRes.svg).not.toContain("<foreignObject");
+    expect(svgRes.svg).toContain("<polygon");
+    expect(svgRes.svg).toContain("<ellipse");
+    expect(svgRes.svg).toContain("HTTP Request");
+    expect(svgRes.svg).toContain("Token Valid?");
+    expect(svgRes.svg).toContain("Redis Sessions");
+
+    const mmd = renderViewToMermaid(flowView, { theme: "light" });
+    expect(mmd).toContain('start(["<small>TERMINAL</small><br/><b>HTTP Request</b>"])');
+    expect(mmd).toContain('check{"<small>DECISION · NEEDS INPUT</small><br/><b>Token Valid?</b>"}');
+    expect(mmd).toContain('sessions[("<small>CACHE</small><br/><b>Redis Sessions</b>');
+  });
+
+  it("never collapses a single '+1 more' item in sections, fields, or exports", () => {
+    expect(getCollapsedVisibleCount(5, 5)).toEqual({ visibleCount: 5, hiddenCount: 0 });
+    expect(getCollapsedVisibleCount(6, 5)).toEqual({ visibleCount: 6, hiddenCount: 0 });
+    expect(getCollapsedVisibleCount(7, 5)).toEqual({ visibleCount: 5, hiddenCount: 2 });
+    expect(getCollapsedVisibleCount(9, 8)).toEqual({ visibleCount: 9, hiddenCount: 0 });
+    expect(getCollapsedVisibleCount(10, 8)).toEqual({ visibleCount: 8, hiddenCount: 2 });
+
+    const sixItemView: DesignView = {
+      id: "collapse_check",
+      title: "Collapse Check",
+      diagram_type: "general",
+      direction: "TB",
+      nodes: [
+        {
+          id: "svc",
+          kind: "Service",
+          title: "Worker",
+          status: "draft",
+          locked: false,
+          sections: [
+            {
+              id: "steps",
+              heading: "Steps",
+              items: ["step_1", "step_2", "step_3", "step_4", "step_5", "step_6"],
+            },
+          ],
+        },
+      ],
+      edges: [],
+    };
+
+    const svgSix = renderViewToSvg({
+      view: sixItemView,
+      positions: { svc: { x: 40, y: 40 } },
+      theme: "dark",
+      bgPattern: "dots",
+    });
+    expect(svgSix.svg).toContain("step_6");
+    expect(svgSix.svg).not.toContain("+1 more");
+
+    const mmdSix = renderViewToMermaid(sixItemView, { theme: "dark" });
+    expect(mmdSix).toContain("step_6");
+    expect(mmdSix).not.toContain("+1 more");
+
+    const sevenItemView = structuredClone(sixItemView);
+    sevenItemView.nodes[0]!.sections[0]!.items.push("step_7");
+    const svgSeven = renderViewToSvg({
+      view: sevenItemView,
+      positions: { svc: { x: 40, y: 40 } },
+      theme: "dark",
+      bgPattern: "dots",
+    });
+    expect(svgSeven.svg).not.toContain("step_7");
+    expect(svgSeven.svg).toContain("+2 more");
+
+    const mmdSeven = renderViewToMermaid(sevenItemView, { theme: "dark" });
+    expect(mmdSeven).not.toContain("step_7");
+    expect(mmdSeven).toContain("+2 more");
   });
 });

@@ -26,6 +26,14 @@ export const EntityRefSchema = z
 export const DiagramTypeSchema = z.enum(["general", "er"]);
 export type DiagramType = z.infer<typeof DiagramTypeSchema>;
 
+export const NodeShapeSchema = z.enum([
+  "card",
+  "decision",
+  "terminal",
+  "store",
+]);
+export type NodeShape = z.infer<typeof NodeShapeSchema>;
+
 export const CardinalitySchema = z.enum(["1", "0..1", "1..*", "0..*"]);
 export type Cardinality = z.infer<typeof CardinalitySchema>;
 
@@ -79,6 +87,7 @@ export const DesignNodeSchema = z.object({
   id: idSlugSchema("node.id"),
   entity_ref: EntityRefSchema.optional(),
   kind: z.string().trim().min(1, "node.kind is required"),
+  shape: NodeShapeSchema.optional(),
   title: z.string().trim().min(1, "node.title is required"),
   summary: z.string().optional(),
   status: NodeStatusSchema.default("draft"),
@@ -366,6 +375,7 @@ export const NodeUpdatePatchSchema = z.object({
   id: idSlugSchema("node.id"),
   entity_ref: EntityRefSchema.nullable().optional(),
   kind: z.string().trim().min(1).optional(),
+  shape: NodeShapeSchema.nullable().optional(),
   title: z.string().trim().min(1).optional(),
   summary: z.string().nullable().optional(),
   status: NodeStatusSchema.optional(),
@@ -414,3 +424,19 @@ export const CodeRefUpdateSchema = z.object({
   code_refs: z.array(CodeRefSchema),
 });
 export type CodeRefUpdate = z.infer<typeof CodeRefUpdateSchema>;
+
+export const ThemeModeSchema = z.enum(["dark", "light"]);
+export type ThemeMode = z.infer<typeof ThemeModeSchema>;
+
+export const BgPatternSchema = z.enum(["dots", "grid"]);
+export type BgPattern = z.infer<typeof BgPatternSchema>;
+
+export const ScrollModeSchema = z.enum(["pan", "zoom"]);
+export type ScrollMode = z.infer<typeof ScrollModeSchema>;
+
+export const UserPreferencesSchema = z.object({
+  theme: ThemeModeSchema.optional(),
+  bg_pattern: BgPatternSchema.optional(),
+  scroll_mode: ScrollModeSchema.optional(),
+});
+export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
