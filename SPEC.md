@@ -72,22 +72,25 @@ Redlinify/
 │       ├── src/
 │       │   ├── api/client.ts           # Typed REST & WebSocket client
 │       │   ├── components/
-│       │   │   ├── App.tsx             # Workbench shell, shortcuts, undo/redo, theme state
+│       │   │   ├── App.tsx             # Workbench shell, canvas sync & composition
 │       │   │   ├── TabBar.tsx          # Scrollable tabs + triage badges + `+` & Search controls
 │       │   │   ├── TriageBar.tsx       # Filter bar, Export dropdown & Triage/Pending Review triggers
 │       │   │   ├── StructuredNode.tsx  # General architecture card & ER entity node
 │       │   │   ├── StepEdge.tsx        # Orthogonal/step edge with step badges, ER marks & bend handles
-│       │   │   ├── InspectorDrawer.tsx # Spec / Threads / Links & Code / Workspace Triage & Decisions drawer
+│       │   │   ├── InspectorDrawer.tsx # Drawer shell delegating element & workspace tabs
+│       │   │   ├── inspector/          # Split drawer tabs (NodeSpec, EdgeSpec, NodeLinks, ThreadPanel, WorkspacePending, WorkspaceDecisions)
 │       │   │   ├── CommandSearchModal.tsx # Typo-tolerant workspace-wide quick jump (`Ctrl+K` / `/`)
 │       │   │   ├── ContextMenu.tsx     # Canvas/node/edge/tab context menu + `Add Entry to…` submenu
 │       │   │   ├── EdgeCreateModal.tsx # Modal for new edges & ER cardinality/relation setup
 │       │   │   └── ErrorBoundary.tsx
+│       │   ├── hooks/                  # Extracted App hooks (sync, history, shortcuts, viewport navigation, interactions, context menu, search, export, theme, toast)
 │       │   ├── layout/
 │       │   │   ├── elk.ts              # Lazy ELKjs auto-layout + incremental .layout/ merge
 │       │   │   └── routing.ts          # 4-sided handle geometry & orthogonal bend waypoint routing
 │       │   └── utils/
 │       │       ├── exportDiagram.ts    # PNG (2× HD), pure SVG, Mermaid `.mmd` / copy, and JSON export
-│       │       └── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
+│       │       ├── fuzzySearch.ts      # Typo-tolerant Damerau-Levenshtein workspace search index
+│       │       └── viewportNavigation.ts # Auto-detected Trackpad/Mouse wheel math & arrow acceleration curve
 │       └── test/
 └── skill/
     └── SKILL.md                        # Agent workflow instructions
@@ -310,7 +313,8 @@ Build a clean, theme-aware developer workbench hosted at **`http://127.0.0.1:417
      * Auto-lays out nodes according to `view.direction` (`TB` or `LR`) using deterministic estimates + measured dimensions.
      * Applies `.layout/{view_id}.json` manual position overrides only for nodes that have saved positions so adding one node doesn't scramble existing ones, alongside per-edge `edge_routes`.
      * Includes an **"Auto-Layout / Reset Positions"** toolbar button that clears overrides for the active tab.
-   * **Lightweight Inline & Spatial Editing:**
+   * **Lightweight Inline & Spatial Editing & Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`):**
+     * **Scroll Wheel Mode (`Scroll: Pan | Zoom`) & Keyboard Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`):** Bottom-left segmented `Scroll: Pan | Zoom` pill next to zoom controls (defaults to `Pan`, persisted per browser via `localStorage`): in `Pan` mode, scroll / 2-finger swipe pans (`1:1`) while pinch or `Ctrl+Scroll`/`Cmd+Scroll` zooms; in `Zoom` mode, vertical scroll zooms smoothly toward the cursor while drag, `Space+Drag`, `Shift+Scroll`, or `Arrow` keys pan (pinch still zooms). Supports `+`/`-`/`0`/`1`/`Shift+1` zoom shortcuts and smooth tap-vs-hold accelerated `Arrow` panning (with `Shift+Arrow` boost and diagonal movement). `overscroll-behavior: none` prevents unintended browser swipe-back navigation.
      * Toolbar `+ Add Box` / `+ Add Entity`, multi-select (`Ctrl/Cmd+Click` or `Shift+Drag` marquee), and right-click context menus (dismissed automatically on pan/drag/wheel).
      * Drag from any of 4-sided node handles to create a new edge (`EdgeCreateModal.tsx` for label, step number, style, or ER cardinality/relation kind).
      * Select an edge and drag its midpoint or segment split handles to create orthogonal waypoints persisted in `.layout/{view_id}.json` (`edge_routes`).
