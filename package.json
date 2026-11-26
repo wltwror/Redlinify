@@ -1,6 +1,6 @@
 {
   "name": "redlinify",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Stop fighting AI architecture in chat. Visual, Git-native diagrams & ER schemas shared between developers and coding agents via MCP.",
   "homepage": "https://github.com/wltwror/Redlinify#readme",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@redlinify/shared",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Shared Zod schemas, canonical hashing, semantic diff engine, and locked atomic storage for Redlinify.",
   "homepage": "https://github.com/wltwror/Redlinify#readme",
   "repository": {
