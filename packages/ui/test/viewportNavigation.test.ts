@@ -8,12 +8,9 @@ import {
   TRACKPAD_PAN_SPEED,
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
-  WHEEL_GESTURE_IDLE_MS,
   computeArrowPanSpeed,
   computeNextViewportFromWheel,
-  isLikelyMouseWheelEvent,
   normalizeWheelDelta,
-  resolveWheelDevice,
 } from "../src/utils/viewportNavigation.js";
 
 describe("viewportNavigation", () => {
@@ -23,68 +20,34 @@ describe("viewportNavigation", () => {
     expect(normalizeWheelDelta(1, 2)).toBe(320);
   });
 
-  it("auto-detects trackpad vs discrete mouse wheel and latches asymmetrically", () => {
-    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: -100, deltaMode: 0 })).toBe(true);
-    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: -120, deltaMode: 0 })).toBe(true);
-    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: 3, deltaMode: 1 })).toBe(true);
-    expect(isLikelyMouseWheelEvent({ deltaX: 12, deltaY: 100, deltaMode: 0 })).toBe(false);
-    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: 16, deltaMode: 0 })).toBe(false);
-    expect(isLikelyMouseWheelEvent({ deltaX: 0, deltaY: 16.5, deltaMode: 0 })).toBe(false);
+  it("pans in Pan scroll mode (default) for 2D, integer, and fractional wheel deltas while preserving zoom", () => {
+    for (const [deltaX, deltaY] of [
+      [40, 80],
+      [0, -100],
+      [0, -66.67],
+    ] as const) {
+      const res = computeNextViewportFromWheel({
+        viewport: { x: 100, y: 50, zoom: 1.2 },
+        clientX: 400,
+        clientY: 300,
+        containerRect: { left: 0, top: 60 },
+        deltaX,
+        deltaY,
+        deltaMode: 0,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        scrollMode: "pan",
+      });
 
-    // Trackpad flick starting small (16px) stays latched to trackpad through a 100px peak spike
-    const first = resolveWheelDevice(
-      { deltaX: 0, deltaY: 16, deltaMode: 0 },
-      { device: null, lastTimestamp: 0 },
-      1000,
-    );
-    expect(first.device).toBe("trackpad");
-
-    const spikedFlick = resolveWheelDevice(
-      { deltaX: 0, deltaY: 100, deltaMode: 0 },
-      first.nextState,
-      1016,
-    );
-    expect(spikedFlick.device).toBe("trackpad");
-
-    // After idle gap, a discrete wheel notch switches cleanly to mouse zoom
-    const mouseNotch = resolveWheelDevice(
-      { deltaX: 0, deltaY: -100, deltaMode: 0 },
-      spikedFlick.nextState,
-      1016 + WHEEL_GESTURE_IDLE_MS + 20,
-    );
-    expect(mouseNotch.device).toBe("mouse");
-
-    // Moving straight from mouse wheel to a 2D trackpad scroll switches immediately to trackpad
-    const backToTrackpad = resolveWheelDevice(
-      { deltaX: 4, deltaY: 12, deltaMode: 0 },
-      mouseNotch.nextState,
-      mouseNotch.nextState.lastTimestamp + 40,
-    );
-    expect(backToTrackpad.device).toBe("trackpad");
+      expect(res.action).toBe("pan");
+      expect(res.viewport.x).toBeCloseTo(100 - deltaX * TRACKPAD_PAN_SPEED);
+      expect(res.viewport.y).toBeCloseTo(50 - deltaY * TRACKPAD_PAN_SPEED);
+      expect(res.viewport.zoom).toBe(1.2);
+    }
   });
 
-  it("pans in 2D at 1:1 speed for trackpad deltas while preserving zoom", () => {
-    const res = computeNextViewportFromWheel({
-      viewport: { x: 100, y: 50, zoom: 1.2 },
-      clientX: 400,
-      clientY: 300,
-      containerRect: { left: 0, top: 60 },
-      deltaX: 40,
-      deltaY: 80,
-      deltaMode: 0,
-      ctrlKey: false,
-      metaKey: false,
-      shiftKey: false,
-      detectedDevice: "trackpad",
-    });
-
-    expect(res.action).toBe("pan");
-    expect(res.viewport.x).toBeCloseTo(100 - 40 * TRACKPAD_PAN_SPEED);
-    expect(res.viewport.y).toBeCloseTo(50 - 80 * TRACKPAD_PAN_SPEED);
-    expect(res.viewport.zoom).toBe(1.2);
-  });
-
-  it("performs gentle cursor-centered pinch zoom on Windows/Linux and macOS", () => {
+  it("performs gentle cursor-centered pinch / Ctrl+wheel zoom in Pan mode across platforms", () => {
     for (const isMac of [false, true]) {
       const start = { x: 120, y: 80, zoom: 1 };
       const containerRect = { left: 20, top: 60 };
@@ -102,7 +65,7 @@ describe("viewportNavigation", () => {
         ctrlKey: true,
         metaKey: false,
         shiftKey: false,
-        detectedDevice: "trackpad",
+        scrollMode: "pan",
         isMac,
       });
 
@@ -134,7 +97,7 @@ describe("viewportNavigation", () => {
       ctrlKey: true,
       metaKey: false,
       shiftKey: false,
-      detectedDevice: "mouse",
+      scrollMode: "zoom",
     });
 
     expect(res.action).toBe("zoom");
@@ -142,7 +105,7 @@ describe("viewportNavigation", () => {
   });
 
   it("converts Shift+vertical wheel into horizontal pan on non-macOS systems", () => {
-    for (const detectedDevice of ["trackpad", "mouse"] as const) {
+    for (const scrollMode of ["pan", "zoom"] as const) {
       const res = computeNextViewportFromWheel({
         viewport: { x: 0, y: 0, zoom: 1 },
         clientX: 200,
@@ -154,7 +117,7 @@ describe("viewportNavigation", () => {
         ctrlKey: false,
         metaKey: false,
         shiftKey: true,
-        detectedDevice,
+        scrollMode,
         isMac: false,
       });
 
@@ -164,7 +127,41 @@ describe("viewportNavigation", () => {
     }
   });
 
-  it("zooms on detected mouse wheel and clamps zoom bounds", () => {
+  it("zooms reliably in Zoom scroll mode for integer, fractional, and small vertical deltas and pans when horizontal dominates", () => {
+    for (const deltaY of [-120, -66.67, -12]) {
+      const zoomed = computeNextViewportFromWheel({
+        viewport: { x: 0, y: 0, zoom: 1 },
+        clientX: 100,
+        clientY: 100,
+        containerRect: { left: 0, top: 0 },
+        deltaX: 0,
+        deltaY,
+        deltaMode: 0,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        scrollMode: "zoom",
+      });
+      expect(zoomed.action).toBe("zoom");
+      expect(zoomed.viewport.zoom).toBeGreaterThan(1);
+    }
+
+    const horizontalPan = computeNextViewportFromWheel({
+      viewport: { x: 0, y: 0, zoom: 1 },
+      clientX: 100,
+      clientY: 100,
+      containerRect: { left: 0, top: 0 },
+      deltaX: 50,
+      deltaY: 10,
+      deltaMode: 0,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      scrollMode: "zoom",
+    });
+    expect(horizontalPan.action).toBe("pan");
+    expect(horizontalPan.viewport.x).toBeCloseTo(-50 * TRACKPAD_PAN_SPEED);
+
     const zoomedIn = computeNextViewportFromWheel({
       viewport: { x: 0, y: 0, zoom: VIEWPORT_MAX_ZOOM - 0.05 },
       clientX: 100,
@@ -176,7 +173,7 @@ describe("viewportNavigation", () => {
       ctrlKey: false,
       metaKey: false,
       shiftKey: false,
-      detectedDevice: "mouse",
+      scrollMode: "zoom",
     });
     expect(zoomedIn.action).toBe("zoom");
     expect(zoomedIn.viewport.zoom).toBe(VIEWPORT_MAX_ZOOM);
@@ -192,7 +189,7 @@ describe("viewportNavigation", () => {
       ctrlKey: false,
       metaKey: false,
       shiftKey: false,
-      detectedDevice: "mouse",
+      scrollMode: "zoom",
     });
     expect(zoomedOut.action).toBe("zoom");
     expect(zoomedOut.viewport.zoom).toBe(VIEWPORT_MIN_ZOOM);

@@ -10,8 +10,7 @@ import {
   VIEWPORT_MIN_ZOOM,
   computeArrowPanSpeed,
   computeNextViewportFromWheel,
-  resolveWheelDevice,
-  type WheelGestureState,
+  type ScrollMode,
 } from "../utils/viewportNavigation";
 
 export type ArrowDirectionKey =
@@ -30,6 +29,7 @@ interface UseViewportNavigationOptions {
   positionsRef: RefBox<Record<string, Point>>;
   edgeRoutesRef: RefBox<Record<string, EdgeRoute>>;
   viewportReadyRef: RefBox<boolean>;
+  scrollMode: ScrollMode;
   getViewport: ReturnType<typeof useReactFlow>["getViewport"];
   setViewport: ReturnType<typeof useReactFlow>["setViewport"];
   fitView: ReturnType<typeof useReactFlow>["fitView"];
@@ -63,6 +63,7 @@ export function useViewportNavigation({
   positionsRef,
   edgeRoutesRef,
   viewportReadyRef,
+  scrollMode,
   getViewport,
   setViewport,
   fitView,
@@ -72,10 +73,8 @@ export function useViewportNavigation({
   clearContextMenu,
 }: UseViewportNavigationOptions) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wheelGestureRef = useRef<WheelGestureState>({
-    device: null,
-    lastTimestamp: 0,
-  });
+  const scrollModeRef = useRef<ScrollMode>(scrollMode);
+  scrollModeRef.current = scrollMode;
 
   const pressedArrowsRef = useRef<Set<ArrowDirectionKey>>(new Set());
   const arrowShiftRef = useRef(false);
@@ -140,13 +139,6 @@ export function useViewportNavigation({
       e.stopPropagation();
       clearContextMenu();
 
-      const { device, nextState } = resolveWheelDevice(
-        { deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode },
-        wheelGestureRef.current,
-        performance.now(),
-      );
-      wheelGestureRef.current = nextState;
-
       const next = computeNextViewportFromWheel({
         viewport: getViewport(),
         clientX: e.clientX,
@@ -158,7 +150,7 @@ export function useViewportNavigation({
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
         shiftKey: e.shiftKey,
-        detectedDevice: device,
+        scrollMode: scrollModeRef.current,
         isMac,
         minZoom: VIEWPORT_MIN_ZOOM,
         maxZoom: VIEWPORT_MAX_ZOOM,

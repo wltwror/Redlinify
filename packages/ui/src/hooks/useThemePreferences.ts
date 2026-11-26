@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { ScrollMode } from "../utils/viewportNavigation";
 
 export function useThemePreferences() {
   const [theme, setTheme] = useState<"dark" | "light">(() =>
@@ -11,6 +12,15 @@ export function useThemePreferences() {
         : "dots";
     } catch {
       return "dots";
+    }
+  });
+  const [scrollMode, setScrollMode] = useState<ScrollMode>(() => {
+    try {
+      return localStorage.getItem("redlinify-scroll-mode") === "zoom"
+        ? "zoom"
+        : "pan";
+    } catch {
+      return "pan";
     }
   });
 
@@ -31,6 +41,14 @@ export function useThemePreferences() {
     }
   }, [bgPattern]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem("redlinify-scroll-mode", scrollMode);
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, [scrollMode]);
+
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
@@ -42,6 +60,8 @@ export function useThemePreferences() {
   return {
     theme,
     bgPattern,
+    scrollMode,
+    setScrollMode,
     toggleTheme,
     toggleBgPattern,
   };

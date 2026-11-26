@@ -272,8 +272,8 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | :--- | :--- |
 | Select element & open inspector | Click a box/entity or relationship line |
 | Multi-select boxes | `Ctrl+Click` / `Cmd+Click` (or `Shift+Drag` marquee) |
-| Pan canvas (Trackpad / Mouse) | 2-finger trackpad scroll (simultaneous with mouse), drag canvas or `Space+Drag`, `Shift+Scroll`, or `Arrow` keys (tap for precision, hold for accelerated cruise, `Shift+Arrow` fast) |
-| Zoom canvas | Mouse scroll wheel, Trackpad pinch / `Ctrl+Scroll` / `Cmd+Scroll` (auto-detected with no mode switch), `+`/`-`, `1` (100%), `0` or `Shift+1` (Fit View) |
+| Pan canvas | 2-finger swipe / scroll (`Scroll: Pan`, default), drag canvas or `Space+Drag`, `Shift+Scroll`, or `Arrow` keys (tap for precision, hold for accelerated cruise, `Shift+Arrow` fast) |
+| Zoom canvas | Pinch / `Ctrl+Scroll` / `Cmd+Scroll` in `Pan` mode, plain scroll wheel in `Zoom` mode (bottom-left `Scroll: Pan \| Zoom` switch), `+`/`-`, `1` (100%), `0` or `Shift+1` (Fit View) |
 | Connect two nodes | Drag from any 4-sided handle to another node |
 | Bend or split an edge | Select a line and drag its midpoint or segment split handles |
 | Inline edit title / entry / attribute | Double-click text inside an unlocked card (clear text + `Enter` deletes entries & ER attributes) |

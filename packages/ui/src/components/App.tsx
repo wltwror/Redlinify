@@ -95,8 +95,14 @@ function WorkbenchInner() {
     zoomTo,
   } = useReactFlow();
 
-  const { theme, bgPattern, toggleTheme, toggleBgPattern } =
-    useThemePreferences();
+  const {
+    theme,
+    bgPattern,
+    scrollMode,
+    setScrollMode,
+    toggleTheme,
+    toggleBgPattern,
+  } = useThemePreferences();
   const { toast, showToast } = useToast();
 
   const [rfNodes, setRfNodes, onNodesChange] =
@@ -535,6 +541,7 @@ function WorkbenchInner() {
     positionsRef,
     edgeRoutesRef,
     viewportReadyRef,
+    scrollMode,
     getViewport,
     setViewport,
     fitView,
@@ -1030,8 +1037,48 @@ function WorkbenchInner() {
             </ReactFlow>
           )}
 
+          {activeView && (
+            <div
+              role="group"
+              aria-label="Scroll wheel behavior"
+              className="nowheel absolute bottom-[15px] left-[52px] z-20 flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/95 p-1 pl-2 shadow-lg backdrop-blur-sm"
+            >
+              <span className="select-none text-[11px] font-medium text-slate-400">
+                Scroll
+              </span>
+              <div className="flex items-center rounded-md bg-slate-950/70 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setScrollMode("pan")}
+                  aria-pressed={scrollMode === "pan"}
+                  title="Scroll or 2-finger swipe pans; pinch or Ctrl/Cmd+scroll zooms"
+                  className={`rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    scrollMode === "pan"
+                      ? "bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/40"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Pan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScrollMode("zoom")}
+                  aria-pressed={scrollMode === "zoom"}
+                  title="Scroll zooms at cursor; drag, Space+drag, or arrows pan"
+                  className={`rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    scrollMode === "zoom"
+                      ? "bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/40"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Zoom
+                </button>
+              </div>
+            </div>
+          )}
+
           {selectedNodeIds.length > 1 && (
-            <div className="pointer-events-none absolute bottom-4 left-14 z-30 rounded-lg border border-sky-500/40 bg-slate-900/90 px-3 py-1.5 text-[11px] text-sky-200 shadow-lg backdrop-blur-sm">
+            <div className="pointer-events-none absolute bottom-14 left-[52px] z-30 rounded-lg border border-sky-500/40 bg-slate-900/90 px-3 py-1.5 text-[11px] text-sky-200 shadow-lg backdrop-blur-sm">
               {selectedNodeIds.length} boxes selected — drag together or press Delete
             </div>
           )}
