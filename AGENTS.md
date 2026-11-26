@@ -7,8 +7,9 @@ This document captures architectural invariants, conventions, and verification c
 ## 1. Monorepo Layout
 
 * `docs/SPEC.md` — Authoritative architecture, schema, MCP, and workbench specification.
-* `examples/coffee-shop/` — Standalone sample `.design/` sandbox workspace kept separate from Redlinify's own `.design/` architecture views.
-* `packages/shared` (`@redlinify/shared`) — Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
+* `examples/coffee-shop/` & `examples/fleet-er/` — Standalone sample `.design/` workspaces (General & Crow's Foot ER) kept separate from Redlinify's own `.design/` architecture views.
+* `e2e/` — Headless Chromium Playwright E2E suite (`npm run test:e2e`).
+* `packages/shared` (`@redlinify/shared`) — Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and atomic filesystem (`atomicFs.ts`) / lock (`fileLock.ts`) `.design/` storage (`storage.ts`). Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
 * `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop|update`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
 * `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + lazy-loaded `elkjs` + Tailwind CSS browser workbench supporting structured architecture cards and Crow's Foot ER diagrams, Dark/Light + Dots/Grid themes, scrollable tab bar (`Tab`/`Shift+Tab`), typo-tolerant fuzzy search, diagram export (`PNG`/`SVG`/`Mermaid`/`JSON`), Vite `manualChunks` splitting, and unit tests in `packages/ui/test/`.
 * `scripts/install.sh` & `scripts/install.ps1` — One-line installers (macOS/Linux/WSL and Windows PowerShell) that clone/fast-forward `~/.redlinify`, build, and link `redlinify` while keeping `.git` intact for `redlinify update`.
@@ -57,5 +58,6 @@ npm install         # Install workspace dependencies
 npm run typecheck   # Type-check all workspace packages in topological order
 npm run build       # Build all workspace packages in topological order
 npm test            # Run Vitest test suites (shared + server + ui)
+npm run test:e2e    # Run Playwright Chromium E2E checks against built UI
 npm run update      # Self-update local clone, rebuild, and restart active UI
 ```

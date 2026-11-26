@@ -63,6 +63,22 @@ function sampleView(id = "classes"): DesignView {
   };
 }
 
+async function waitForEvent<T>(
+  events: T[],
+  predicate: (ev: T) => boolean,
+  timeoutMs = 4000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const match = events.find(predicate);
+    if (match) return match;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  throw new Error(
+    `Timed out waiting for WebSocket event after ${timeoutMs}ms (received ${events.length})`,
+  );
+}
+
 describe("Redlinify HTTP + WebSocket server", () => {
   it("serves health, workspace, view CRUD, 409 conflicts, threads, and cross-links", async () => {
     const { dir, storage, server } = await setupServer();
@@ -214,15 +230,13 @@ describe("Redlinify HTTP + WebSocket server", () => {
     expect(putRes.status).toBe(200);
     const putJson = (await putRes.json()) as { view_hash: string };
 
-    await new Promise((r) => setTimeout(r, 250));
-    expect(
-      events.some(
-        (e) =>
-          e.type === "view_updated" &&
-          e.view_id === "classes" &&
-          e.origin === "ui",
-      ),
-    ).toBe(true);
+    await waitForEvent(
+      events,
+      (e) =>
+        e.type === "view_updated" &&
+        e.view_id === "classes" &&
+        e.origin === "ui",
+    );
 
     // 2. External thread write -> origin: "external"
     events.length = 0;
@@ -240,18 +254,17 @@ describe("Redlinify HTTP + WebSocket server", () => {
       actor: "agent",
     });
 
-    await new Promise((r) => setTimeout(r, 250));
-    expect(
-      events.some((e) => e.type === "threads_updated" && e.origin === "external"),
-    ).toBe(true);
-    expect(
-      events.some(
-        (e) =>
-          e.type === "view_updated" &&
-          e.view_id === "classes" &&
-          e.origin === "external",
-      ),
-    ).toBe(true);
+    await waitForEvent(
+      events,
+      (e) => e.type === "threads_updated" && e.origin === "external",
+    );
+    await waitForEvent(
+      events,
+      (e) =>
+        e.type === "view_updated" &&
+        e.view_id === "classes" &&
+        e.origin === "external",
+    );
 
     ws.close();
   });
