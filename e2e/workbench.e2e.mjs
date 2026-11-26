@@ -723,15 +723,31 @@ async function main() {
       countBeforeCollapseBox + 1,
       { timeout: 5000 },
     );
-    const collapseNode = page.locator(".react-flow__node.selected").first();
+    await page.waitForSelector(
+      '.react-flow__node.selected [data-section-id="responsibilities"]',
+      { timeout: 5000 },
+    );
+    const collapseNodeId = await page
+      .locator(".react-flow__node.selected")
+      .first()
+      .getAttribute("data-id");
+    assert.ok(collapseNodeId, "Expected selected node data-id");
+    await page.locator(".react-flow__controls-fitview").first().click();
+    await page.waitForTimeout(250);
+
+    const collapseNode = page.locator(`.react-flow__node[data-id="${collapseNodeId}"]`);
     for (let i = 2; i <= 6; i++) {
-      await collapseNode
-        .locator('button[title^="Add line to "]')
-        .first()
-        .click({ force: true });
-      await collapseNode.locator("input").first().fill(`step_${i}`);
-      await page.keyboard.press("Enter");
-      await page.waitForTimeout(120);
+      await collapseNode.hover();
+      const addLineBtn = collapseNode.locator('button[title^="Add line to "]').first();
+      await addLineBtn.click({ force: true });
+      const entryInput = collapseNode.locator('input[placeholder="New entry..."]');
+      await entryInput.waitFor({ state: "visible", timeout: 4000 });
+      await entryInput.fill(`step_${i}`);
+      await entryInput.press("Enter");
+      await collapseNode.getByText(`step_${i}`).waitFor({
+        state: "visible",
+        timeout: 4000,
+      });
     }
     assert.equal(await collapseNode.getByText("step_6").isVisible(), true);
     assert.equal(
@@ -739,13 +755,17 @@ async function main() {
       0,
     );
 
+    await collapseNode.hover();
     await collapseNode
       .locator('button[title^="Add line to "]')
       .first()
       .click({ force: true });
-    await collapseNode.locator("input").first().fill("step_7");
-    await page.keyboard.press("Enter");
-    await page.waitForSelector('.react-flow__node.selected button:has-text("+2 more")', {
+    const entry7Input = collapseNode.locator('input[placeholder="New entry..."]');
+    await entry7Input.waitFor({ state: "visible", timeout: 4000 });
+    await entry7Input.fill("step_7");
+    await entry7Input.press("Enter");
+    await collapseNode.getByRole("button", { name: "+2 more" }).waitFor({
+      state: "visible",
       timeout: 5000,
     });
     assert.equal(await collapseNode.getByText("step_7").count(), 0);
