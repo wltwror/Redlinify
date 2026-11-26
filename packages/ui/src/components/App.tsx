@@ -55,6 +55,7 @@ import {
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
 } from "../utils/viewportNavigation";
+import { CanvasDock } from "./CanvasDock";
 import { CommandSearchModal } from "./CommandSearchModal";
 import { ContextMenu } from "./ContextMenu";
 import { EdgeCreateModal } from "./EdgeCreateModal";
@@ -899,16 +900,7 @@ function WorkbenchInner() {
         filter={filter}
         onChangeFilter={setFilter}
         hasActiveView={Boolean(activeView)}
-        diagramType={activeView?.diagram_type ?? "general"}
-        direction={activeView?.direction ?? "TB"}
-        onToggleDirection={() => void handleToggleDirection()}
-        onAddBox={() => void createBoxAtPosition()}
-        onAutoLayout={() => void handleAutoLayout()}
         onExport={(format) => void handleExportDiagram(format)}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={() => void handleUndo()}
-        onRedo={() => void handleRedo()}
         openQuestionsCount={openQuestionsCount}
         pendingAgentCount={pendingAgentCount}
         decisionsCount={decisionsCount}
@@ -1038,6 +1030,20 @@ function WorkbenchInner() {
           )}
 
           {activeView && (
+            <CanvasDock
+              diagramType={activeView.diagram_type ?? "general"}
+              direction={activeView.direction ?? "TB"}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onAddBox={() => void createBoxAtPosition()}
+              onUndo={() => void handleUndo()}
+              onRedo={() => void handleRedo()}
+              onToggleDirection={() => void handleToggleDirection()}
+              onAutoLayout={() => void handleAutoLayout()}
+            />
+          )}
+
+          {activeView && (
             <div
               role="group"
               aria-label="Scroll wheel behavior"
@@ -1085,7 +1091,7 @@ function WorkbenchInner() {
 
           {toast && (
             <div
-              className={`pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-3.5 py-2 text-xs font-medium shadow-xl ${
+              className={`pointer-events-none fixed bottom-16 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-3.5 py-2 text-xs font-medium shadow-xl ${
                 toast.tone === "error"
                   ? "border-rose-500/50 bg-rose-950/90 text-rose-100"
                   : toast.tone === "warning"

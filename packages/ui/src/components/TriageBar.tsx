@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowDownUp,
   Bell,
   CheckCircle2,
   ChevronDown,
@@ -9,14 +8,9 @@ import {
   FileCode2,
   FileImage,
   FileJson,
-  LayoutGrid,
-  Plus,
-  Redo2,
   Sparkles,
-  Undo2,
   WifiOff,
 } from "lucide-react";
-import type { DiagramType, ViewDirection } from "@redlinify/shared/browser";
 import type { ExportFormat } from "../utils/exportDiagram";
 
 export type TriageFilter =
@@ -30,16 +24,7 @@ interface TriageBarProps {
   filter: TriageFilter;
   onChangeFilter: (next: TriageFilter) => void;
   hasActiveView: boolean;
-  diagramType: DiagramType;
-  direction: ViewDirection;
-  onToggleDirection: () => void;
-  onAddBox: () => void;
-  onAutoLayout: () => void;
   onExport: (format: ExportFormat) => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
   openQuestionsCount: number;
   pendingAgentCount: number;
   decisionsCount: number;
@@ -61,16 +46,7 @@ export function TriageBar({
   filter,
   onChangeFilter,
   hasActiveView,
-  diagramType,
-  direction,
-  onToggleDirection,
-  onAddBox,
-  onAutoLayout,
   onExport,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
   openQuestionsCount,
   pendingAgentCount,
   decisionsCount,
@@ -104,6 +80,7 @@ export function TriageBar({
     setExportOpen(false);
     onExport(format);
   };
+
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/80 px-3 py-1.5">
       <div className="flex items-center gap-1 overflow-x-auto">
@@ -126,61 +103,66 @@ export function TriageBar({
         })}
       </div>
 
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div
+          role="group"
+          aria-label="Agent review drawers"
+          className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950/50 p-0.5"
+        >
+          <button
+            type="button"
+            onClick={onOpenQuestions}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+              openQuestionsCount > 0
+                ? "bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                : "text-slate-300 hover:bg-slate-800"
+            }`}
+          >
+            <Bell className="h-3 w-3 text-amber-400" />
+            <span>Questions</span>
+            <span className="rounded bg-slate-900/80 px-1 text-[10px] font-mono">
+              {openQuestionsCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenPendingReview}
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+              pendingAgentCount > 0
+                ? "bg-sky-500/15 text-sky-200 hover:bg-sky-500/25"
+                : "text-slate-300 hover:bg-slate-800"
+            }`}
+          >
+            <Sparkles className="h-3 w-3 text-sky-400" />
+            <span className="hidden sm:inline">Pending Review</span>
+            <span className="sm:hidden">Review</span>
+            <span className="rounded bg-slate-900/80 px-1 text-[10px] font-mono">
+              {pendingAgentCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenDecisions}
+            title="View resolved design decisions (ADRs) & project threads"
+            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+              decisionsCount > 0
+                ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                : "text-slate-300 hover:bg-slate-800"
+            }`}
+          >
+            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+            <span>Decisions</span>
+            <span className="rounded bg-slate-900/80 px-1 text-[10px] font-mono">
+              {decisionsCount}
+            </span>
+          </button>
+        </div>
+
         {hasActiveView && (
           <>
-            <button
-              type="button"
-              onClick={onAddBox}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-100 hover:bg-slate-700 transition-colors"
-            >
-              <Plus className="h-3 w-3 text-sky-400" />
-              {diagramType === "er" ? "Add Entity" : "Add Box"}
-            </button>
-
-            <div className="flex items-center rounded-md border border-slate-700 bg-slate-800/70 overflow-hidden">
-              <button
-                type="button"
-                disabled={!canUndo}
-                onClick={onUndo}
-                title="Undo (Ctrl+Z)"
-                aria-label="Undo"
-                className="px-1.5 py-1 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none"
-              >
-                <Undo2 className="h-3 w-3" />
-              </button>
-              <div className="h-3.5 w-px bg-slate-700" />
-              <button
-                type="button"
-                disabled={!canRedo}
-                onClick={onRedo}
-                title="Redo (Ctrl+Shift+Z)"
-                aria-label="Redo"
-                className="px-1.5 py-1 text-slate-300 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none"
-              >
-                <Redo2 className="h-3 w-3" />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={onToggleDirection}
-              title="Toggle diagram flow direction (TB / LR)"
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/70 px-2 py-1 text-[11px] font-mono text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              <ArrowDownUp className="h-3 w-3 text-slate-400" />
-              {direction}
-            </button>
-
-            <button
-              type="button"
-              onClick={onAutoLayout}
-              title="Reset manual positions & routes and run ELK auto-layout"
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/70 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              <LayoutGrid className="h-3 w-3 text-slate-400" />
-              <span className="hidden sm:inline">Auto-Layout</span>
-            </button>
+            <div className="hidden sm:block h-4 w-px bg-slate-800" />
 
             <div ref={exportRef} className="relative">
               <button
@@ -189,7 +171,7 @@ export function TriageBar({
                 aria-label="Export diagram"
                 aria-expanded={exportOpen}
                 title="Export active diagram as PNG, SVG, Mermaid, or JSON"
-                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/70 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+                className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-700 transition-colors"
               >
                 <Download className="h-3 w-3 text-sky-400" />
                 <span className="hidden sm:inline">Export</span>
@@ -252,56 +234,6 @@ export function TriageBar({
             </div>
           </>
         )}
-
-        <button
-          type="button"
-          onClick={onOpenQuestions}
-          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-            openQuestionsCount > 0
-              ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
-              : "border-slate-700 bg-slate-800/70 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          <Bell className="h-3 w-3" />
-          <span>Questions</span>
-          <span className="rounded bg-slate-950/60 px-1 text-[10px] font-mono">
-            {openQuestionsCount}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onOpenPendingReview}
-          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-            pendingAgentCount > 0
-              ? "border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25"
-              : "border-slate-700 bg-slate-800/70 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          <Sparkles className="h-3 w-3" />
-          <span className="hidden sm:inline">Pending Review</span>
-          <span className="sm:hidden">Review</span>
-          <span className="rounded bg-slate-950/60 px-1 text-[10px] font-mono">
-            {pendingAgentCount}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onOpenDecisions}
-          title="View resolved design decisions (ADRs) & project threads"
-          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-            decisionsCount > 0
-              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-              : "border-slate-700 bg-slate-800/70 text-slate-300 hover:bg-slate-700"
-          }`}
-        >
-          <CheckCircle2 className="h-3 w-3" />
-          <span>Decisions</span>
-          <span className="rounded bg-slate-950/60 px-1 text-[10px] font-mono">
-            {decisionsCount}
-          </span>
-        </button>
 
         {showOfflineWarning && (
           <span

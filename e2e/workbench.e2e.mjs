@@ -220,6 +220,7 @@ async function dispatchWheel(
 
 async function main() {
   const tmpRepo = await buildTempRepo();
+  const prefsPath = path.join(tmpRepo, "preferences.json");
   const port = await pickFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const cliPath = path.join(REPO_ROOT, "packages", "server", "dist", "cli.js");
@@ -227,7 +228,10 @@ async function main() {
   const proc = spawn(
     process.execPath,
     [cliPath, "ui", "--dir", tmpRepo, "--port", String(port), "--host", "127.0.0.1"],
-    { stdio: ["ignore", "pipe", "pipe"] },
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, REDLINIFY_PREFERENCES_PATH: prefsPath },
+    },
   );
 
   let serverLogs = "";
@@ -265,7 +269,7 @@ async function main() {
     });
     await page.waitForTimeout(350);
 
-    // 1. Scroll [Pan | Zoom] bottom-left switch & non-overlap check
+    // 1. Scroll [Pan | Zoom] bottom-left switch & CanvasDock bottom-center non-overlap check
     const scrollGroup = page.getByRole("group", {
       name: "Scroll wheel behavior",
     });
@@ -275,12 +279,40 @@ async function main() {
     assert.equal(await panBtn.getAttribute("aria-pressed"), "true");
     assert.equal(await zoomBtn.getAttribute("aria-pressed"), "false");
 
+    const canvasDock = page.getByRole("toolbar", { name: "Canvas actions" });
+    await canvasDock.waitFor({ state: "visible", timeout: 4000 });
+
     const controlsBox = await page.locator(".react-flow__controls").boundingBox();
     const groupBox = await scrollGroup.boundingBox();
-    assert.ok(controlsBox && groupBox);
+    const dockBox = await canvasDock.boundingBox();
+    const minimapBox = await page.locator(".react-flow__minimap").boundingBox();
+    assert.ok(controlsBox && groupBox && dockBox && minimapBox);
     assert.ok(
       groupBox.x >= controlsBox.x + controlsBox.width - 0.5,
       `Scroll switch overlaps Controls: ${JSON.stringify({ controlsBox, groupBox })}`,
+    );
+    assert.ok(
+      dockBox.x >= groupBox.x + groupBox.width - 0.5,
+      `CanvasDock overlaps Scroll switch: ${JSON.stringify({ groupBox, dockBox })}`,
+    );
+    assert.ok(
+      dockBox.x + dockBox.width <= minimapBox.x + 0.5,
+      `CanvasDock overlaps MiniMap: ${JSON.stringify({ dockBox, minimapBox })}`,
+    );
+
+    // Verify CanvasDock Add Box & Undo work cleanly
+    const initialNodeCount = await page.locator(".react-flow__node").count();
+    await canvasDock.getByRole("button", { name: "Add Box" }).click();
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll(".react-flow__node").length === expected,
+      initialNodeCount + 1,
+      { timeout: 3000 },
+    );
+    await canvasDock.getByRole("button", { name: "Undo" }).click();
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll(".react-flow__node").length === expected,
+      initialNodeCount,
+      { timeout: 3000 },
     );
 
     // 2. Pan mode (default): 2D, integer, and fractional wheel deltas pan; pinch zooms
@@ -300,14 +332,16 @@ async function main() {
     const v2 = await getViewport(page);
     assert.ok(v2.zoom > v1.zoom * 1.06 && v2.zoom < v1.zoom * 1.12);
 
-    // 3. Switch to Zoom mode & verify discrete/fractional/small zoom + reload persistence
+    // 3. Switch to Zoom mode & verify discrete/fractional/small zoom + global preferences.json persistence
     await zoomBtn.click();
-    await page.waitForTimeout(60);
+    await page.waitForTimeout(180);
     assert.equal(await zoomBtn.getAttribute("aria-pressed"), "true");
     assert.equal(
       await page.evaluate(() => localStorage.getItem("redlinify-scroll-mode")),
       "zoom",
     );
+    const savedPrefs = JSON.parse(await fs.readFile(prefsPath, "utf8"));
+    assert.equal(savedPrefs.scroll_mode, "zoom");
 
     const z0 = await getViewport(page);
     await dispatchWheel(page, 0, -100);
@@ -332,6 +366,8 @@ async function main() {
     assert.ok(Math.abs(z4.zoom - z3.zoom) < 1e-4);
     assert.ok(Math.abs(z4.x - z3.x - -120.0) < 2.0);
 
+    // Clear localStorage completely and reload — global server preferences.json must restore Zoom mode
+    await page.evaluate(() => localStorage.clear());
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForSelector('.react-flow__node[data-id="design_storage"]', {
       timeout: 12000,
@@ -339,9 +375,9 @@ async function main() {
     await page.waitForTimeout(300);
     assert.equal(await zoomBtn.getAttribute("aria-pressed"), "true");
     await panBtn.click();
-    await page.waitForTimeout(60);
+    await page.waitForTimeout(120);
     assert.equal(await panBtn.getAttribute("aria-pressed"), "true");
-    console.log("PASS 1: Scroll [Pan | Zoom] switch, pinch, and persistence verified.");
+    console.log("PASS 1: CanvasDock, Scroll [Pan | Zoom] switch, pinch, and global preferences.json verified.");
 
     // 4. Canvas drag + keyboard shortcuts + accelerated Arrow hold vs tap
     const panePt = await findEmptyPanePoint(page);

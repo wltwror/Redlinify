@@ -414,3 +414,19 @@ export const CodeRefUpdateSchema = z.object({
   code_refs: z.array(CodeRefSchema),
 });
 export type CodeRefUpdate = z.infer<typeof CodeRefUpdateSchema>;
+
+export const ThemeModeSchema = z.enum(["dark", "light"]);
+export type ThemeMode = z.infer<typeof ThemeModeSchema>;
+
+export const BgPatternSchema = z.enum(["dots", "grid"]);
+export type BgPattern = z.infer<typeof BgPatternSchema>;
+
+export const ScrollModeSchema = z.enum(["pan", "zoom"]);
+export type ScrollMode = z.infer<typeof ScrollModeSchema>;
+
+export const UserPreferencesSchema = z.object({
+  theme: ThemeModeSchema.optional(),
+  bg_pattern: BgPatternSchema.optional(),
+  scroll_mode: ScrollModeSchema.optional(),
+});
+export type UserPreferences = z.infer<typeof UserPreferencesSchema>;

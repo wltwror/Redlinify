@@ -15,6 +15,7 @@ import {
   NotFoundError,
   ThreadKindSchema,
   ThreadTargetTypeSchema,
+  UserPreferencesSchema,
   ValidationError,
   ViewDirectionSchema,
   ViewLayoutSchema,
@@ -23,6 +24,7 @@ import {
   idSlugSchema,
   type DesignView,
 } from "@redlinify/shared";
+import { readUserPreferences, updateUserPreferences } from "./preferences.js";
 
 export interface WebServerOptions {
   storage: DesignStorage;
@@ -30,6 +32,7 @@ export interface WebServerOptions {
   port?: number;
   uiDistDir?: string;
   watch?: boolean;
+  preferencesPath?: string;
 }
 
 export type WsOrigin = "ui" | "external";
@@ -579,6 +582,22 @@ export async function createWebServer(
             }
           }
           sendJson(res, 200, { entity_ref: entityRef, occurrences });
+          return;
+        }
+
+        if (method === "GET" && pathname === "/api/preferences") {
+          const preferences = await readUserPreferences(options.preferencesPath);
+          sendJson(res, 200, { preferences });
+          return;
+        }
+
+        if (method === "PUT" && pathname === "/api/preferences") {
+          const body = UserPreferencesSchema.parse(await readJsonBody(req));
+          const preferences = await updateUserPreferences(
+            body,
+            options.preferencesPath,
+          );
+          sendJson(res, 200, { preferences });
           return;
         }
 

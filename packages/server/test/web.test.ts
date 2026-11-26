@@ -15,7 +15,7 @@ afterEach(async () => {
   }
 });
 
-async function setupServer(options?: { uiDistDir?: string }) {
+async function setupServer(options?: { uiDistDir?: string; preferencesPath?: string }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "redlinify-web-"));
   const storage = new DesignStorage(dir);
   await storage.initWorkspace("WebTest");
@@ -25,6 +25,7 @@ async function setupServer(options?: { uiDistDir?: string }) {
     port: 0,
     uiDistDir: options?.uiDistDir,
     watch: true,
+    preferencesPath: options?.preferencesPath ?? path.join(dir, "preferences.json"),
   });
 
   cleanups.push(async () => {
@@ -295,5 +296,51 @@ describe("Redlinify HTTP + WebSocket server", () => {
     expect(delRes.status).toBe(200);
     expect(await delRes.json()).toEqual({ deleted: true, view_id: "fleet_er" });
     expect(await storage.listViewIds()).toEqual([]);
+  });
+
+  it("persists global user preferences across GET/PUT /api/preferences with validation", async () => {
+    const { dir, server } = await setupServer();
+    const prefsPath = path.join(dir, "preferences.json");
+
+    const initialRes = await fetch(`${server.url}/api/preferences`);
+    expect(initialRes.status).toBe(200);
+    expect(await initialRes.json()).toEqual({ preferences: {} });
+
+    const scrollRes = await fetch(`${server.url}/api/preferences`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scroll_mode: "zoom" }),
+    });
+    expect(scrollRes.status).toBe(200);
+    expect(await scrollRes.json()).toEqual({
+      preferences: { scroll_mode: "zoom" },
+    });
+
+    const themeRes = await fetch(`${server.url}/api/preferences`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: "light" }),
+    });
+    expect(themeRes.status).toBe(200);
+    expect(await themeRes.json()).toEqual({
+      preferences: { scroll_mode: "zoom", theme: "light" },
+    });
+
+    const rereadRes = await fetch(`${server.url}/api/preferences`);
+    expect(rereadRes.status).toBe(200);
+    expect(await rereadRes.json()).toEqual({
+      preferences: { scroll_mode: "zoom", theme: "light" },
+    });
+
+    const onDisk = JSON.parse(await fs.readFile(prefsPath, "utf8"));
+    expect(onDisk).toEqual({ scroll_mode: "zoom", theme: "light" });
+
+    const invalidRes = await fetch(`${server.url}/api/preferences`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scroll_mode: "invalid" }),
+    });
+    expect(invalidRes.status).toBe(400);
+    await invalidRes.text();
   });
 });
