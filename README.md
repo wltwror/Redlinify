@@ -35,10 +35,7 @@
 
 ## See It in Action
 
-<!-- TODO (GitHub UI): Drag demo.mp4 here to replace this fallback image with GitHub's native HTML5 video player URL (https://github.com/user-attachments/assets/...) -->
-<p align="center">
-  <img src="docs/media/screenshot-architecture-dark.webp" alt="Redlinify recorded walkthrough preview: System Architecture view in Dark Mode" width="900" />
-</p>
+https://github.com/user-attachments/assets/40982a94-da08-44c5-9ba0-dae41d199ee0
 
 <p align="center">
   <sub>Animated logo intro · Read &amp; reply to agent comments · Pin change requests &amp; lock in violet · Model &amp; bend ER lines (<code>Ctrl+Z</code>) · Compact semantic diff &amp; Decision Log</sub>
