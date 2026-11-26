@@ -12,6 +12,7 @@ import {
   MAX_VISIBLE_ER_FIELDS,
   MAX_VISIBLE_SECTION_ITEMS,
   estimateNodeSize,
+  getCollapsedVisibleCount,
   getEffectiveNodeShape,
 } from "../layout/elk";
 import { computeSmartEdgeRouting, type Point } from "../layout/routing";
@@ -686,7 +687,11 @@ function renderNodeSvg(
       );
       curY += 18;
     } else {
-      const visible = fields.slice(0, MAX_VISIBLE_ER_FIELDS);
+      const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+        fields.length,
+        MAX_VISIBLE_ER_FIELDS,
+      );
+      const visible = fields.slice(0, visibleCount);
       for (const f of visible) {
         if (curY + 8 > contentLimitY) break;
         const nullMark = f.nullable ? "○" : "*";
@@ -717,9 +722,9 @@ function renderNodeSvg(
         );
         curY += 20;
       }
-      if (fields.length > MAX_VISIBLE_ER_FIELDS && curY + 4 <= contentLimitY) {
+      if (hiddenCount > 0 && curY + 4 <= contentLimitY) {
         out.push(
-          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${fields.length - MAX_VISIBLE_ER_FIELDS} more</text>`,
+          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${hiddenCount} more</text>`,
         );
         curY += 16;
       }
@@ -745,7 +750,11 @@ function renderNodeSvg(
       );
       curY += 16;
     } else {
-      const visibleItems = sec.items.slice(0, MAX_VISIBLE_SECTION_ITEMS);
+      const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+        sec.items.length,
+        MAX_VISIBLE_SECTION_ITEMS,
+      );
+      const visibleItems = sec.items.slice(0, visibleCount);
       const maxItemChars = Math.max(18, Math.floor((width - 28) / 6.5));
       for (const item of visibleItems) {
         if (curY + 4 > contentLimitY) break;
@@ -754,9 +763,9 @@ function renderNodeSvg(
         );
         curY += 17;
       }
-      if (sec.items.length > MAX_VISIBLE_SECTION_ITEMS && curY + 4 <= contentLimitY) {
+      if (hiddenCount > 0 && curY + 4 <= contentLimitY) {
         out.push(
-          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${sec.items.length - MAX_VISIBLE_SECTION_ITEMS} more</text>`,
+          `<text x="14" y="${curY}" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="${isDark ? "#38bdf8" : "#0284c7"}">+${hiddenCount} more</text>`,
         );
         curY += 15;
       }

@@ -5,6 +5,7 @@ import type {
 } from "@redlinify/shared/browser";
 import {
   MAX_VISIBLE_SECTION_ITEMS,
+  getCollapsedVisibleCount,
   getEffectiveNodeShape,
 } from "../layout/elk";
 
@@ -207,13 +208,15 @@ export function renderViewToMermaid(
       for (const sec of node.sections) {
         if (sec.items.length === 0) continue;
         parts.push("", `<b>${escMermaidHtml(sec.heading)}</b>`);
-        for (const item of sec.items.slice(0, MAX_VISIBLE_SECTION_ITEMS)) {
+        const { visibleCount, hiddenCount } = getCollapsedVisibleCount(
+          sec.items.length,
+          MAX_VISIBLE_SECTION_ITEMS,
+        );
+        for (const item of sec.items.slice(0, visibleCount)) {
           parts.push(`• ${escMermaidHtml(truncateText(item, 44))}`);
         }
-        if (sec.items.length > MAX_VISIBLE_SECTION_ITEMS) {
-          parts.push(
-            `<i>+${sec.items.length - MAX_VISIBLE_SECTION_ITEMS} more</i>`,
-          );
+        if (hiddenCount > 0) {
+          parts.push(`<i>+${hiddenCount} more</i>`);
         }
       }
     }
