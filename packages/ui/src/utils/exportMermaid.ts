@@ -3,7 +3,10 @@ import type {
   DesignNode,
   DesignView,
 } from "@redlinify/shared/browser";
-import { MAX_VISIBLE_SECTION_ITEMS } from "../layout/elk";
+import {
+  MAX_VISIBLE_SECTION_ITEMS,
+  getEffectiveNodeShape,
+} from "../layout/elk";
 
 function truncateText(str: string, maxChars: number): string {
   if (str.length <= maxChars) return str;
@@ -106,7 +109,16 @@ function formatMermaidNodeShape(
   node: DesignNode,
   innerHtml: string,
 ): string {
-  if (node.sections.length === 0) {
+  if (node.shape === "decision") {
+    return `  ${mId}{"${innerHtml}"}`;
+  }
+  if (node.shape === "terminal") {
+    return `  ${mId}(["${innerHtml}"])`;
+  }
+  if (node.shape === "store") {
+    return `  ${mId}[("${innerHtml}")]`;
+  }
+  if (!node.shape && node.sections.length === 0) {
     if (/(store|storage|db|database|cache|queue)/i.test(node.kind)) {
       return `  ${mId}[("${innerHtml}")]`;
     }
@@ -190,16 +202,19 @@ export function renderViewToMermaid(
       );
     }
 
-    for (const sec of node.sections) {
-      if (sec.items.length === 0) continue;
-      parts.push("", `<b>${escMermaidHtml(sec.heading)}</b>`);
-      for (const item of sec.items.slice(0, MAX_VISIBLE_SECTION_ITEMS)) {
-        parts.push(`• ${escMermaidHtml(truncateText(item, 44))}`);
-      }
-      if (sec.items.length > MAX_VISIBLE_SECTION_ITEMS) {
-        parts.push(
-          `<i>+${sec.items.length - MAX_VISIBLE_SECTION_ITEMS} more</i>`,
-        );
+    const effectiveShape = getEffectiveNodeShape(node, view.diagram_type);
+    if (effectiveShape === "card" || effectiveShape === "store") {
+      for (const sec of node.sections) {
+        if (sec.items.length === 0) continue;
+        parts.push("", `<b>${escMermaidHtml(sec.heading)}</b>`);
+        for (const item of sec.items.slice(0, MAX_VISIBLE_SECTION_ITEMS)) {
+          parts.push(`• ${escMermaidHtml(truncateText(item, 44))}`);
+        }
+        if (sec.items.length > MAX_VISIBLE_SECTION_ITEMS) {
+          parts.push(
+            `<i>+${sec.items.length - MAX_VISIBLE_SECTION_ITEMS} more</i>`,
+          );
+        }
       }
     }
 

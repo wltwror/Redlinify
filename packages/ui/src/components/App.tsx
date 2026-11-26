@@ -273,6 +273,7 @@ function WorkbenchInner() {
     handleCommitWaypoints,
     handleUpdateEdgeRoute,
     createBoxAtPosition,
+    handleChangeNodeShape,
     handleAutoLayout,
     handleToggleDirection,
     snapshotDragOrigin,
@@ -339,6 +340,7 @@ function WorkbenchInner() {
     selectSingleNode,
     selectSingleEdge,
     createBoxAtPosition,
+    handleChangeNodeShape,
     handleAutoLayout,
     handleToggleDirection,
     handleUndo,
@@ -1035,7 +1037,7 @@ function WorkbenchInner() {
               direction={activeView.direction ?? "TB"}
               canUndo={canUndo}
               canRedo={canRedo}
-              onAddBox={() => void createBoxAtPosition()}
+              onAddBox={(shape) => void createBoxAtPosition(undefined, shape)}
               onUndo={() => void handleUndo()}
               onRedo={() => void handleRedo()}
               onToggleDirection={() => void handleToggleDirection()}

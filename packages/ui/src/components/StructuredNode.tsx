@@ -21,6 +21,7 @@ import type {
 import {
   MAX_VISIBLE_ER_FIELDS,
   MAX_VISIBLE_SECTION_ITEMS,
+  getEffectiveNodeShape,
 } from "../layout/elk";
 
 export interface StructuredNodeData extends Record<string, unknown> {
@@ -147,6 +148,7 @@ function StructuredNodeComponent({
 
   const statusMeta = STATUS_BADGE[node.status];
   const isErMode = diagramType === "er" || (node.fields && node.fields.length > 0);
+  const effectiveShape = getEffectiveNodeShape(node, diagramType);
   const fields = node.fields ?? [];
   const visibleFields = fieldsExpanded
     ? fields
@@ -211,20 +213,281 @@ function StructuredNodeComponent({
   const handleClass =
     "!h-3.5 !w-3.5 !z-20 redlinify-handle !border-2 !border-slate-900 !bg-sky-400/90 opacity-75 group-hover:opacity-100 hover:!bg-sky-300 hover:!scale-125 transition-all";
 
-  return (
-    <div
-      className={`group relative min-w-[270px] max-w-[350px] rounded-xl border bg-slate-900/95 shadow-xl backdrop-blur-sm transition-all ${cardBorder} ${
-        dimmed ? "opacity-25" : "opacity-100"
-      } ${pulsing ? "redlinify-pulse-ring" : ""}`}
-    >
-      {/* 4-sided connection handles (all usable as source & target via ConnectionMode.Loose) */}
+  const svgStrokeClass = selected
+    ? "stroke-sky-400"
+    : node.status === "drifted"
+      ? "stroke-rose-500"
+      : isHumanEdited
+        ? "stroke-sky-500"
+        : waitingOnHumanCount > 0
+          ? "stroke-amber-500"
+          : node.locked
+            ? "stroke-violet-500"
+            : "stroke-slate-700";
+
+  const svgStrokeWidth =
+    selected || isHumanEdited
+      ? 2.2
+      : node.locked || node.status !== "draft"
+        ? 1.8
+        : 1.35;
+
+  const svgShadowClass = selected
+    ? "drop-shadow-[0_0_8px_rgba(56,189,248,0.45)]"
+    : "drop-shadow-lg";
+
+  const visibilityAndPulse = `${dimmed ? "opacity-25" : "opacity-100"} ${
+    pulsing ? "redlinify-pulse-ring" : ""
+  }`;
+
+  const renderHandles = () => (
+    <>
       <Handle id="top" type="source" position={Position.Top} className={handleClass} />
       <Handle id="right" type="source" position={Position.Right} className={handleClass} />
       <Handle id="bottom" type="source" position={Position.Bottom} className={handleClass} />
       <Handle id="left" type="source" position={Position.Left} className={handleClass} />
+    </>
+  );
 
+  const renderTitleBlock = (centered = false) =>
+    editingTitle ? (
+      <input
+        type="text"
+        value={titleDraft}
+        onChange={(e) => setTitleDraft(e.target.value)}
+        onBlur={commitTitle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commitTitle();
+          if (e.key === "Escape") {
+            setTitleDraft(node.title);
+            setEditingTitle(false);
+          }
+        }}
+        autoFocus
+        className={`nodrag w-full rounded border border-sky-500 bg-slate-950 px-1.5 py-0.5 text-sm font-semibold text-slate-100 focus:outline-none ${
+          centered ? "text-center text-xs" : ""
+        }`}
+      />
+    ) : (
+      <div
+        onDoubleClick={(e) => {
+          if (node.locked) return;
+          e.stopPropagation();
+          setTitleDraft(node.title);
+          setEditingTitle(true);
+        }}
+        title={
+          node.locked
+            ? "Locked node (unlock to edit)"
+            : "Double-click to edit title"
+        }
+        className={`font-semibold text-slate-100 leading-snug break-words ${
+          centered ? "text-xs max-w-[190px]" : "text-sm"
+        }`}
+      >
+        {node.title}
+      </div>
+    );
+
+  const editedBadge = isHumanEdited ? (
+    <span
+      title="Modified by human since last agent checkpoint"
+      className="shrink-0 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 border border-sky-500/30"
+    >
+      edited
+    </span>
+  ) : null;
+
+  const threadsButton =
+    totalOpenThreads > 0 ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenNodeThreads(node.id);
+        }}
+        title={`${totalOpenThreads} open thread(s)`}
+        className={`nodrag inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+          waitingOnHumanCount > 0
+            ? "border-amber-500/40 bg-amber-500/20 text-amber-200"
+            : "border-slate-700 bg-slate-800 text-slate-300"
+        }`}
+      >
+        <MessageSquare className="h-2.5 w-2.5" />
+        {totalOpenThreads}
+      </button>
+    ) : null;
+
+  const lockButton = (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggleLock(node.id);
+      }}
+      title={
+        node.locked
+          ? "Locked (agent cannot mutate). Click to unlock."
+          : "Unlocked. Click to lock."
+      }
+      className={`nodrag rounded p-1 transition-colors ${
+        node.locked
+          ? "border border-violet-500/35 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"
+          : "text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+      }`}
+    >
+      {node.locked ? (
+        <Lock className="h-3.5 w-3.5" />
+      ) : (
+        <Unlock className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+
+  if (effectiveShape === "decision") {
+    return (
+      <div
+        data-shape="decision"
+        className={`group relative flex min-w-[244px] max-w-[290px] min-h-[144px] items-center justify-center px-11 py-6 transition-all ${visibilityAndPulse}`}
+      >
+        {renderHandles()}
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 h-full w-full ${svgShadowClass}`}
+        >
+          <polygon
+            points="50,2 98,50 50,98 2,50"
+            vectorEffect="non-scaling-stroke"
+            strokeWidth={svgStrokeWidth}
+            strokeLinejoin="round"
+            className={`fill-slate-900/95 transition-colors ${svgStrokeClass}`}
+          />
+        </svg>
+        <div className="relative z-10 flex max-w-[168px] flex-col items-center gap-1 text-center">
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-sky-400">
+              {node.kind}
+            </span>
+            <span
+              className={`shrink-0 rounded-full border px-1.5 py-0.2 text-[9px] font-medium ${statusMeta.classes}`}
+            >
+              {statusMeta.label}
+            </span>
+          </div>
+          {renderTitleBlock(true)}
+          {node.summary && (
+            <p className="text-[10px] leading-tight text-slate-400 line-clamp-2">
+              {node.summary}
+            </p>
+          )}
+          <div className="mt-0.5 flex items-center justify-center gap-1">
+            {editedBadge}
+            {threadsButton}
+            {lockButton}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (effectiveShape === "terminal") {
+    return (
+      <div
+        data-shape="terminal"
+        className={`group relative min-w-[200px] max-w-[290px] rounded-full border bg-slate-900/95 px-6 py-2.5 shadow-xl backdrop-blur-sm transition-all ${cardBorder} ${visibilityAndPulse}`}
+      >
+        {renderHandles()}
+        <div className="flex flex-col items-center gap-1 text-center">
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            <span className="rounded bg-slate-800 px-1.5 py-0.2 font-mono text-[9px] font-semibold uppercase tracking-wider text-sky-300 border border-slate-700">
+              {node.kind}
+            </span>
+            <span
+              className={`shrink-0 rounded-full border px-1.5 py-0.2 text-[9px] font-medium ${statusMeta.classes}`}
+            >
+              {statusMeta.label}
+            </span>
+            {editedBadge}
+            {threadsButton}
+            {lockButton}
+          </div>
+          {renderTitleBlock(true)}
+          {node.summary && (
+            <p className="text-[11px] text-slate-400 leading-snug line-clamp-2 max-w-[230px]">
+              {node.summary}
+            </p>
+          )}
+          {(node.entity_ref || (node.code_refs && node.code_refs.length > 0)) && (
+            <div className="flex items-center gap-2 text-[9.5px] font-mono text-slate-400">
+              {node.entity_ref && (
+                <span className="inline-flex items-center gap-1 truncate max-w-[130px]">
+                  <Link2 className="h-2.5 w-2.5 shrink-0 text-sky-400" />
+                  {node.entity_ref}
+                </span>
+              )}
+              {node.code_refs && node.code_refs.length > 0 && (
+                <span className="inline-flex items-center gap-1 text-emerald-300">
+                  <Code2 className="h-2.5 w-2.5" />
+                  {node.code_refs.length} ref{node.code_refs.length > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const isStore = effectiveShape === "store";
+
+  return (
+    <div
+      data-shape={effectiveShape}
+      className={
+        isStore
+          ? `group relative min-w-[270px] max-w-[350px] pt-5 pb-3 transition-all ${visibilityAndPulse}`
+          : `group relative min-w-[270px] max-w-[350px] rounded-xl border bg-slate-900/95 shadow-xl backdrop-blur-sm transition-all ${cardBorder} ${visibilityAndPulse}`
+      }
+    >
+      {/* 4-sided connection handles (all usable as source & target via ConnectionMode.Loose) */}
+      {renderHandles()}
+
+      {isStore && (
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 h-full w-full ${svgShadowClass}`}
+        >
+          <path
+            d="M 1 8.5 L 1 92 A 49 7 0 0 0 99 92 L 99 8.5 Z"
+            vectorEffect="non-scaling-stroke"
+            strokeWidth={svgStrokeWidth}
+            className={`fill-slate-900/95 transition-colors ${svgStrokeClass}`}
+          />
+          <ellipse
+            cx="50"
+            cy="8.5"
+            rx="49"
+            ry="7"
+            vectorEffect="non-scaling-stroke"
+            strokeWidth={svgStrokeWidth}
+            className={`fill-slate-800/90 transition-colors ${svgStrokeClass}`}
+          />
+        </svg>
+      )}
+
+      <div className={isStore ? "relative z-10 px-0.5" : ""}>
       {/* Top header */}
-      <div className="flex items-center justify-between gap-2 rounded-t-xl border-b border-slate-800 bg-slate-900 px-3 py-2">
+      <div
+        className={`flex items-center justify-between gap-2 border-b px-3 py-2 ${
+          isStore
+            ? "border-slate-800/80 bg-transparent"
+            : "rounded-t-xl border-slate-800 bg-slate-900"
+        }`}
+      >
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="inline-flex shrink-0 items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-sky-300 border border-slate-700">
             {isErMode && <Database className="h-2.5 w-2.5 text-emerald-400" />}
@@ -235,98 +498,18 @@ function StructuredNodeComponent({
           >
             {statusMeta.label}
           </span>
-          {isHumanEdited && (
-            <span
-              title="Modified by human since last agent checkpoint"
-              className="shrink-0 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 border border-sky-500/30"
-            >
-              edited
-            </span>
-          )}
+          {editedBadge}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {totalOpenThreads > 0 && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenNodeThreads(node.id);
-              }}
-              title={`${totalOpenThreads} open thread(s)`}
-              className={`nodrag inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
-                waitingOnHumanCount > 0
-                  ? "border-amber-500/40 bg-amber-500/20 text-amber-200"
-                  : "border-slate-700 bg-slate-800 text-slate-300"
-              }`}
-            >
-              <MessageSquare className="h-2.5 w-2.5" />
-              {totalOpenThreads}
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleLock(node.id);
-            }}
-            title={
-              node.locked
-                ? "Locked (agent cannot mutate). Click to unlock."
-                : "Unlocked. Click to lock."
-            }
-            className={`nodrag rounded p-1 transition-colors ${
-              node.locked
-                ? "border border-violet-500/35 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25"
-                : "text-slate-500 hover:bg-slate-800 hover:text-slate-200"
-            }`}
-          >
-            {node.locked ? (
-              <Lock className="h-3.5 w-3.5" />
-            ) : (
-              <Unlock className="h-3.5 w-3.5" />
-            )}
-          </button>
+          {threadsButton}
+          {lockButton}
         </div>
       </div>
 
       {/* Title & optional summary */}
       <div className="px-3 py-2">
-        {editingTitle ? (
-          <input
-            type="text"
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitTitle();
-              if (e.key === "Escape") {
-                setTitleDraft(node.title);
-                setEditingTitle(false);
-              }
-            }}
-            autoFocus
-            className="nodrag w-full rounded border border-sky-500 bg-slate-950 px-1.5 py-0.5 text-sm font-semibold text-slate-100 focus:outline-none"
-          />
-        ) : (
-          <div
-            onDoubleClick={(e) => {
-              if (node.locked) return;
-              e.stopPropagation();
-              setTitleDraft(node.title);
-              setEditingTitle(true);
-            }}
-            title={
-              node.locked
-                ? "Locked node (unlock to edit)"
-                : "Double-click to edit title"
-            }
-            className="text-sm font-semibold text-slate-100 leading-snug break-words"
-          >
-            {node.title}
-          </div>
-        )}
+        {renderTitleBlock(false)}
 
         {node.summary && (
           <p className="mt-1 text-[11px] text-slate-400 leading-relaxed line-clamp-2">
@@ -643,7 +826,13 @@ function StructuredNodeComponent({
 
       {/* Footer metadata */}
       {(node.entity_ref || (node.code_refs && node.code_refs.length > 0)) && (
-        <div className="flex items-center justify-between gap-2 rounded-b-xl border-t border-slate-800/90 bg-slate-950/60 px-3 py-1.5 text-[10px] text-slate-400">
+        <div
+          className={`flex items-center justify-between gap-2 border-t px-3 py-1.5 text-[10px] text-slate-400 ${
+            isStore
+              ? "border-slate-800/80 bg-transparent"
+              : "rounded-b-xl border-slate-800/90 bg-slate-950/60"
+          }`}
+        >
           <div className="flex items-center gap-1 truncate">
             {node.entity_ref && (
               <span className="inline-flex items-center gap-1 truncate font-mono text-slate-400">
@@ -660,6 +849,7 @@ function StructuredNodeComponent({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

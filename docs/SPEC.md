@@ -146,6 +146,7 @@ Implemented strictly with Zod v4 in [`packages/shared/src/schemas.ts`](packages/
 ```typescript
 // .design/workspace.json
 export type DiagramType = "general" | "er";
+export type NodeShape = "card" | "decision" | "terminal" | "store";
 export type Cardinality = "1" | "0..1" | "1..*" | "0..*";
 export type RelationKind = "association" | "identifying" | "subtype";
 export type HandleSide = "top" | "right" | "bottom" | "left";
@@ -194,6 +195,7 @@ export interface DesignNode {
   id: string;               // stable slug, e.g. "dedup_engine"
   entity_ref?: string;      // optional canonical snake_case key linking same concept across tabs
   kind: string;             // short badge: "Class", "Interface", "Stage", "Entity", "Store"
+  shape?: NodeShape;        // optional general-view silhouette ("card" default, "decision" rhombus, "terminal" pill, "store" cylinder)
   title: string;
   summary?: string;
   status: NodeStatus;
@@ -325,7 +327,7 @@ Build a clean, theme-aware developer workbench hosted at **`http://127.0.0.1:417
    * **Layout Engine (`elkjs`, lazy-loaded):**
      * Auto-lays out nodes according to `view.direction` (`TB` or `LR`) using deterministic estimates + measured dimensions.
      * Applies `.layout/{view_id}.json` manual position overrides only for nodes that have saved positions so adding one node doesn't scramble existing ones, alongside per-edge `edge_routes`.
-     * Includes an **"Auto-Layout"** button in the floating bottom-center **Canvas Dock** (`CanvasDock.tsx`: `+`, `Undo/Redo`, `TB/LR`, `Auto-Layout`) that clears position/route overrides for the active tab.
+     * Includes an **"Auto-Layout"** button in the floating bottom-center **Canvas Dock** (`CanvasDock.tsx`: `[+ | ▾]` shape picker, `Undo/Redo`, `TB/LR`, `Auto-Layout`) that clears position/route overrides for the active tab.
    * **Lightweight Inline & Spatial Editing & Navigation (`useViewportNavigation.ts`, `viewportNavigation.ts`, `preferences.ts`):**
      * **Scroll Wheel Mode (`Scroll: Pan | Zoom`) & Global Preferences:** Bottom-left segmented `Scroll: Pan | Zoom` pill next to zoom controls (defaults to `Pan`): in `Pan` mode, scroll / 2-finger swipe pans (`1:1`) while pinch or `Ctrl+Scroll`/`Cmd+Scroll` zooms; in `Zoom` mode, vertical scroll zooms smoothly toward the cursor while drag, `Space+Drag`, `Shift+Scroll`, or `Arrow` keys pan (pinch still zooms). `scroll_mode`, `theme`, and `bg_pattern` persist globally across repos/ports in `~/.redlinify/preferences.json` via `GET/PUT /api/preferences` (with browser `localStorage` as immediate initial cache). Supports `+`/`-`/`0`/`1`/`Shift+1` zoom shortcuts and smooth tap-vs-hold accelerated `Arrow` panning (with `Shift+Arrow` boost and diagonal movement). `overscroll-behavior: none` prevents unintended browser swipe-back navigation.
      * Floating `CanvasDock` `+` button (or right-click canvas), multi-select (`Ctrl/Cmd+Click` or `Shift+Drag` marquee), and right-click context menus (dismissed automatically on pan/drag/wheel).

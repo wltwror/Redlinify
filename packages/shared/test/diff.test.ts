@@ -296,4 +296,36 @@ describe("computeSemanticDiff & computeViewHash", () => {
       target_cardinality: { before: "0..*", after: "1..*" },
     });
   });
+
+  it("treats omitted shape and explicit 'card' identically while reporting shape transitions", () => {
+    const base: DesignView = {
+      id: "flow",
+      title: "Flow",
+      diagram_type: "general",
+      direction: "TB",
+      nodes: [
+        {
+          id: "gate",
+          kind: "Decision",
+          title: "Token Valid?",
+          status: "draft",
+          locked: false,
+          sections: [],
+        },
+      ],
+      edges: [],
+    };
+
+    const explicitCard = structuredClone(base);
+    explicitCard.nodes[0]!.shape = "card";
+    expect(computeSemanticDiff(base, explicitCard).has_changes).toBe(false);
+
+    const asDecision = structuredClone(base);
+    asDecision.nodes[0]!.shape = "decision";
+    const diff = computeSemanticDiff(base, asDecision);
+    expect(diff.has_changes).toBe(true);
+    expect(diff.nodes_modified[0]?.changes).toEqual({
+      shape: { before: "card", after: "decision" },
+    });
+  });
 });

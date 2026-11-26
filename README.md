@@ -279,8 +279,8 @@ Redlinify exposes **6 orthogonal tools** (`~1.96k` startup tokens including work
 | Cycle tabs | `Tab` / `Shift+Tab` |
 | Quick search / jump | `Ctrl+K` / `Cmd+K` or `/` (typo-tolerant fuzzy search across views, boxes, attributes, edges & threads) |
 | Export active diagram | Top-right `Export` button (`PNG 2× HD`, `SVG`, `Mermaid .mmd`, `Copy Mermaid`, `JSON`) |
-| Quick actions menu | Right-click canvas, tab, card, or edge |
-| Canvas editing toolbar | Floating bottom-center Canvas Dock (`+`, `Undo`/`Redo`, `TB`/`LR` direction, `Auto-Layout`) |
+| Quick actions menu | Right-click canvas (`Add Box Here`, `Add Shape…`), tab, card, or edge (`Change Shape…`) |
+| Canvas editing toolbar | Floating bottom-center Canvas Dock (`+ ▾` quick-add & shape picker, `Undo`/`Redo`, `TB`/`LR` direction, `Auto-Layout`) |
 | Undo / Redo (nodes, edges & bends) | `Ctrl+Z` / `Ctrl+Shift+Z` (`Cmd` on macOS) or Canvas Dock buttons |
 | Delete selected unlocked elements | `Delete` or `Backspace` |
 | Theme, grid & scroll preferences | Top-right Dots/Grid and Sun/Moon toggles + bottom-left `Scroll: Pan \| Zoom` (persisted globally in `~/.redlinify/preferences.json`) |

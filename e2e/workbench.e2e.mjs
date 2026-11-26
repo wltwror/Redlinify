@@ -571,8 +571,76 @@ async function main() {
     );
     console.log("PASS 4: ER editing, Undo, Light theme, and context menu guards verified.");
 
+    // 8. General view node shapes: CanvasDock split picker, right-click Change Shape, Inspector switcher, and Undo
+    const archBefore = JSON.parse(
+      await fs.readFile(path.join(tmpRepo, ".design", "views", "architecture.json"), "utf8"),
+    );
+    const beforeNodeIds = new Set(archBefore.nodes.map((n) => n.id));
+
+    await page.getByRole("button", { name: "Add shape menu" }).click();
+    await page.getByRole("menuitem", { name: "Decision (Rhombus)" }).click();
+    await page.waitForSelector('[data-shape="decision"] svg polygon', {
+      timeout: 5000,
+    });
+
+    const archDecision = JSON.parse(
+      await fs.readFile(path.join(tmpRepo, ".design", "views", "architecture.json"), "utf8"),
+    );
+    const createdDecision = archDecision.nodes.find((n) => !beforeNodeIds.has(n.id));
+    assert.ok(createdDecision, "Expected newly added decision node on disk");
+    assert.equal(createdDecision.shape, "decision");
+
+    await page.locator(".react-flow__controls-fitview").first().click();
+    await page.waitForTimeout(250);
+    const addedNodeLoc = page.locator(`.react-flow__node[data-id="${createdDecision.id}"]`);
+    await addedNodeLoc.click({ button: "right" });
+    await page.waitForTimeout(150);
+    await page.getByRole("button", { name: "Change Shape…" }).click();
+    await page.getByRole("button", { name: "Store (Database)" }).click();
+    await page.waitForSelector(
+      `.react-flow__node[data-id="${createdDecision.id}"] [data-shape="store"] svg ellipse`,
+      { timeout: 5000 },
+    );
+
+    const archStore = JSON.parse(
+      await fs.readFile(path.join(tmpRepo, ".design", "views", "architecture.json"), "utf8"),
+    );
+    assert.equal(
+      archStore.nodes.find((n) => n.id === createdDecision.id)?.shape,
+      "store",
+    );
+
+    await page
+      .getByRole("group", { name: "Node shape" })
+      .getByRole("button", { name: "Terminal" })
+      .click();
+    await page.waitForSelector(
+      `.react-flow__node[data-id="${createdDecision.id}"] [data-shape="terminal"]`,
+      { timeout: 5000 },
+    );
+    const archTerminal = JSON.parse(
+      await fs.readFile(path.join(tmpRepo, ".design", "views", "architecture.json"), "utf8"),
+    );
+    assert.equal(
+      archTerminal.nodes.find((n) => n.id === createdDecision.id)?.shape,
+      "terminal",
+    );
+
+    await clickEmptyPane(page);
+    await page.getByRole("button", { name: "Undo" }).click();
+    await page.waitForSelector(
+      `.react-flow__node[data-id="${createdDecision.id}"] [data-shape="store"]`,
+      { timeout: 5000 },
+    );
+    await page.getByRole("button", { name: "Undo" }).click();
+    await page.waitForSelector(
+      `.react-flow__node[data-id="${createdDecision.id}"] [data-shape="decision"]`,
+      { timeout: 5000 },
+    );
+    console.log("PASS 5: General view shapes (decision, store, terminal) and undo verified.");
+
     assert.deepEqual(errors, [], `Browser errors: ${errors.join("; ")}`);
-    console.log("PASS 5: Zero console/page errors.");
+    console.log("PASS 6: Zero console/page errors.");
   } catch (err) {
     console.error("E2E FAILED. UI server logs:\n", serverLogs);
     throw err;
