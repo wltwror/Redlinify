@@ -31,9 +31,12 @@ export interface WheelViewportResult {
 
 export const VIEWPORT_MIN_ZOOM = 0.15;
 export const VIEWPORT_MAX_ZOOM = 3;
-export const TRACKPAD_PAN_SPEED = 1.55;
-export const KEYBOARD_PAN_STEP = 160;
-export const KEYBOARD_PAN_FAST_STEP = 340;
+export const TRACKPAD_PAN_SPEED = 1.0;
+export const PINCH_ZOOM_SENSITIVITY = 0.009;
+export const MOUSE_ZOOM_SENSITIVITY = 0.0022;
+export const MAX_ZOOM_STEP = 0.2;
+export const KEYBOARD_PAN_STEP = 120;
+export const KEYBOARD_PAN_FAST_STEP = 260;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -74,18 +77,11 @@ export function computeNextViewportFromWheel({
       dy !== 0);
 
   if (shouldZoom) {
-    let zoomStep = 0;
-    if (dy !== 0) {
-      if (isPinchOrModZoom) {
-        const absD = Math.abs(dy);
-        const rawMagnitude =
-          absD <= 40 ? absD * 0.015 : 40 * 0.015 + (absD - 40) * 0.0025;
-        const magnitude = Math.min(rawMagnitude, 0.3);
-        zoomStep = -Math.sign(dy) * magnitude;
-      } else {
-        zoomStep = clamp(-dy * 0.0032, -0.3, 0.3);
-      }
-    }
+    const sensitivity = isPinchOrModZoom
+      ? PINCH_ZOOM_SENSITIVITY
+      : MOUSE_ZOOM_SENSITIVITY;
+    const zoomStep =
+      dy !== 0 ? clamp(-dy * sensitivity, -MAX_ZOOM_STEP, MAX_ZOOM_STEP) : 0;
 
     const nextZoom = clamp(viewport.zoom * Math.exp(zoomStep), minZoom, maxZoom);
     const px = clientX - containerRect.left;

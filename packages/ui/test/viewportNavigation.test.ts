@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_ZOOM_STEP,
   TRACKPAD_PAN_SPEED,
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
@@ -14,7 +15,7 @@ describe("viewportNavigation", () => {
     expect(normalizeWheelDelta(1, 2)).toBe(320);
   });
 
-  it("pans in 2D at boosted speed in trackpad mode while preserving zoom", () => {
+  it("pans in 2D at 1:1 speed in trackpad mode while preserving zoom", () => {
     const res = computeNextViewportFromWheel({
       viewport: { x: 100, y: 50, zoom: 1.2 },
       clientX: 400,
@@ -35,7 +36,7 @@ describe("viewportNavigation", () => {
     expect(res.viewport.zoom).toBe(1.2);
   });
 
-  it("performs responsive cursor-centered pinch zoom on Windows/Linux and macOS", () => {
+  it("performs gentle cursor-centered pinch zoom on Windows/Linux and macOS", () => {
     for (const isMac of [false, true]) {
       const start = { x: 120, y: 80, zoom: 1 };
       const containerRect = { left: 20, top: 60 };
@@ -58,7 +59,8 @@ describe("viewportNavigation", () => {
       });
 
       expect(res.action).toBe("zoom");
-      expect(res.viewport.zoom).toBeGreaterThan(1.08);
+      expect(res.viewport.zoom).toBeGreaterThan(1.05);
+      expect(res.viewport.zoom).toBeLessThan(1.08);
 
       // Verify flow point directly under cursor remains anchored
       const px = clientX - containerRect.left;
@@ -89,7 +91,7 @@ describe("viewportNavigation", () => {
     });
 
     expect(res.action).toBe("zoom");
-    expect(res.viewport.zoom).toBeCloseTo(Math.exp(0.3), 5);
+    expect(res.viewport.zoom).toBeCloseTo(Math.exp(MAX_ZOOM_STEP), 5);
   });
 
   it("converts Shift+vertical wheel into horizontal pan on non-macOS systems", () => {
