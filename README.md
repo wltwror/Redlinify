@@ -162,6 +162,27 @@ Resolved architectural threads move cleanly into the searchable **Decision Log**
 
 Requires **Node.js >= 22.12.0** and **Git**.
 
+### Option 1: Zero-Install via `npx` / `npm` *(published starting `v0.3.0`)*
+
+Add Redlinify directly to **Claude Code**, **Cursor**, **OpenCode**, or any MCP client—no global clone required:
+
+```json
+{
+  "mcpServers": {
+    "redlinify": {
+      "command": "npx",
+      "args": ["-y", "redlinify", "mcp"]
+    }
+  }
+}
+```
+
+```bash
+npm install -g redlinify   # Optional global install (`redlinify mcp`, `redlinify ui`, `redlinify init`)
+```
+
+### Option 2: Self-Updating Source Install (`curl` / PowerShell)
+
 **macOS / Linux / WSL:**
 
 ```bash
@@ -174,9 +195,7 @@ curl -fsSL https://raw.githubusercontent.com/wltwror/Redlinify/main/scripts/inst
 irm https://raw.githubusercontent.com/wltwror/Redlinify/main/scripts/install.ps1 | iex
 ```
 
-The installer clones Redlinify into `~/.redlinify`, builds all packages, and links `redlinify` cleanly (falling back to `~/.local/bin/redlinify` without `sudo` if global `npm link` is restricted).
-
-Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP client—no manual `init` or UI terminal required:
+The installer clones Redlinify into `~/.redlinify`, builds all packages, and links `redlinify` cleanly (falling back to `~/.local/bin/redlinify` without `sudo` if global `npm link` is restricted). With the Git-clone install:
 
 ```json
 {
@@ -189,13 +208,13 @@ Add Redlinify once to **Claude Code**, **Cursor**, **OpenCode**, or any MCP clie
 }
 ```
 
-* Built-in MCP instructions teach your agent how to draft views, pin questions, respect violet locks, and resolve decisions automatically.
-* On the first diagram write in any Git repo, Redlinify initializes `.design/` and spawns the detached loopback UI daemon (`127.0.0.1:4173`), returning `ui_url`.
-
 ```bash
 redlinify update          # Pull latest changes, install deps if changed, rebuild & refresh active UI
 redlinify update --check  # Preview available updates without modifying your local setup
 ```
+
+* Built-in MCP instructions teach your agent how to draft views, pin questions, respect violet locks, and resolve decisions automatically.
+* On the first diagram write in any Git repo, Redlinify initializes `.design/` and spawns the detached loopback UI daemon (`127.0.0.1:4173`), returning `ui_url`.
 
 <details>
 <summary>Manual install, setup without global link, &amp; CLI commands</summary>

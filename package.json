@@ -32,9 +32,11 @@
   },
   "scripts": {
     "build": "npm run build -w @redlinify/shared && npm run build -w @redlinify/server && npm run build -w @redlinify/ui",
+    "build:npm": "npm run build && node scripts/build-npm-package.mjs",
     "typecheck": "npm run build -w @redlinify/shared && npm run typecheck -w @redlinify/server && npm run typecheck -w @redlinify/ui",
     "test": "vitest run",
     "test:e2e": "node e2e/workbench.e2e.mjs",
+    "test:npm-pack": "node scripts/test-npm-pack.mjs",
     "test:watch": "vitest",
     "update": "node packages/server/dist/cli.js update"
   },

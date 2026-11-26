@@ -1,0 +1,80 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Build, Verify & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches package version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")
+          if [ "${TAG_VERSION}" != "${PKG_VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${PKG_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build all packages
+        run: npm run build
+
+      - name: Run unit & integration tests
+        run: npm test
+
+      - name: Verify npm package pack & standalone CLI
+        run: npm run test:npm-pack
+
+      - name: Stage npm package tarball
+        run: |
+          npm run build:npm
+          cd .npm-stage && npm pack
+
+      - name: Publish to npm registry
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "NPM_TOKEN secret is not configured; skipping npm publish." >> "$GITHUB_STEP_SUMMARY"
+            echo "Add NPM_TOKEN in repository Settings -> Secrets and variables -> Actions, then re-run this workflow or publish .npm-stage." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
+          trap 'npm config delete //registry.npmjs.org/:_authToken || true' EXIT
+          cd .npm-stage
+          npm publish --provenance --access public
+
+      - name: Create or update GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" .npm-stage/redlinify-*.tgz --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" .npm-stage/redlinify-*.tgz --generate-notes --title "${GITHUB_REF_NAME}"
+          fi
