@@ -35,13 +35,10 @@
 
 ## See It in Action
 
-<!-- Tip: For GitHub's native HD HTML5 video player, drag docs/media/demo.mp4 into the GitHub web editor on GitHub.com and replace the <img> tag below with the generated https://github.com/user-attachments/assets/... URL -->
-<p align="center">
-  <img src="docs/media/demo.gif" alt="Redlinify recorded walkthrough: animated logo intro, replying to agent comments, pinning change requests & violet locks, manual canvas modeling & edge connections, Crow's foot ER bending with Ctrl+Z, semantic Pending Review diff, Decision Log, and Light + Grid mode" width="900" />
-</p>
+https://github.com/user-attachments/assets/40982a94-da08-44c5-9ba0-dae41d199ee0
 
 <p align="center">
-  <sub>Animated logo intro · Read &amp; reply to agent comments · Pin change requests &amp; lock in violet · Model &amp; bend ER lines (<code>Ctrl+Z</code>) · Compact semantic diff &amp; Decision Log · <a href="docs/media/demo.mp4">Watch 47s HD MP4</a></sub>
+  <sub>Animated logo intro · Read &amp; reply to agent comments · Pin change requests &amp; lock in violet · Model &amp; bend ER lines (<code>Ctrl+Z</code>) · Compact semantic diff &amp; Decision Log</sub>
 </p>
 
 ---
@@ -140,7 +137,7 @@ When you say *"sync with my edits on the canvas"*, a single `get_workspace()` ca
 Approved contracts stay **locked in violet** with live `code_refs` badges attached, while nodes awaiting human feedback highlight in **amber** both on the canvas and in the MiniMap.
 
 <p align="center">
-  <img src="docs/media/screenshot-architecture-dark.png" alt="Redlinify System Architecture view in Dark Mode showing violet locked nodes, amber needs_input node, MiniMap callout, and orthogonal numbered edges" width="880" />
+  <img src="docs/media/screenshot-architecture-dark.webp" alt="Redlinify System Architecture view in Dark Mode showing violet locked nodes, amber needs_input node, MiniMap callout, and orthogonal numbered edges" width="880" />
 </p>
 
 ### Crow's Foot ER Modeling — Light Mode & Drafting Grid
@@ -148,7 +145,7 @@ Approved contracts stay **locked in violet** with live `code_refs` badges attach
 Model entities with `PK` / `FK` / `UQ` badges, mandatory (`*`) vs nullable (`○`) columns, Crow's foot cardinalities, and subtype forks—complete with instant **Dark/Light** and **Dots/Grid** toggles.
 
 <p align="center">
-  <img src="docs/media/screenshot-er-light.png" alt="Redlinify Sandbox Fleet ER Model in Light Mode with Drafting Grid, Crow's foot cardinalities, subtype forks, and PK/FK/UQ badges" width="880" />
+  <img src="docs/media/screenshot-er-light.webp" alt="Redlinify Sandbox Fleet ER Model in Light Mode with Drafting Grid, Crow's foot cardinalities, subtype forks, and PK/FK/UQ badges" width="880" />
 </p>
 
 ### Searchable Decision Log & Anchored Threads
@@ -156,7 +153,7 @@ Model entities with `PK` / `FK` / `UQ` badges, mandatory (`*`) vs nullable (`○
 Resolved architectural threads move cleanly into the searchable **Decision Log**, preserving full multi-turn context alongside every node and edge across `draft → needs_input → approved → implemented | drifted`.
 
 <p align="center">
-  <img src="docs/media/screenshot-decisions-dark.png" alt="Redlinify Decisions drawer showing searchable resolved Decision Log entries with expandable agent and human discussion transcripts" width="880" />
+  <img src="docs/media/screenshot-decisions-dark.webp" alt="Redlinify Decisions drawer showing searchable resolved Decision Log entries with expandable agent and human discussion transcripts" width="880" />
 </p>
 
 ---
@@ -224,6 +221,7 @@ npm link -w @redlinify/server
 redlinify mcp --open --dir /path/to/repo   # Start MCP + auto-open browser immediately
 redlinify mcp --no-ui --dir /path/to/repo  # Headless MCP without auto-starting the UI
 redlinify ui --open --dir /path/to/repo    # Launch workbench UI standalone
+redlinify ui --open --dir examples/coffee-shop # Try the standalone Coffee Shop sandbox
 redlinify stop --dir /path/to/repo         # Stop the detached UI daemon
 redlinify init --dir /path/to/repo         # Pre-initialize .design/ explicitly
 redlinify update                           # Self-update clone, rebuild & restart active UI (or `npm run update`)
@@ -302,7 +300,7 @@ npm test            # Run Vitest unit & integration suites
 * `packages/server` (`@redlinify/server`): CLI (`mcp`, `ui`, `stop`, `init`, `update`), stdio MCP server (with built-in `instructions` + detached auto-UI launcher), and loopback HTTP + WebSocket UI host.
 * `packages/ui` (`@redlinify/ui`): React 19 + TypeScript + Vite + `@xyflow/react` + `elkjs` Tailwind workbench.
 
-See [SPEC.md](SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for engineering invariants.
+See [docs/SPEC.md](docs/SPEC.md) for the specification and [AGENTS.md](AGENTS.md) for engineering invariants.
 
 </details>
 

@@ -6,7 +6,8 @@ This document captures architectural invariants, conventions, and verification c
 
 ## 1. Monorepo Layout
 
-* `SPEC.md` — Authoritative architecture, schema, MCP, and workbench specification.
+* `docs/SPEC.md` — Authoritative architecture, schema, MCP, and workbench specification.
+* `examples/coffee-shop/` — Standalone sample `.design/` sandbox workspace kept separate from Redlinify's own `.design/` architecture views.
 * `packages/shared` (`@redlinify/shared`) — Zod v4 schemas, canonical hashing, semantic diff engine, lock/patch guards, errors, and locked atomic `.design/` filesystem storage. Exports `@redlinify/shared/browser` (Node-free subset) for the UI.
 * `packages/server` (`@redlinify/server`) — CLI (`redlinify init|mcp|ui|stop|update`), stdio MCP server (6 lean orthogonal tools with built-in workflow `instructions`, `readOnlyHint` annotations, compact non-echoing write responses, and detached `.design/.ui-server.json` auto-UI launcher), and loopback HTTP/WebSocket server (`127.0.0.1:4173`) with `chokidar` self-echo suppression.
 * `packages/ui` (`@redlinify/ui`) — React 19 + Vite + `@xyflow/react` + lazy-loaded `elkjs` + Tailwind CSS browser workbench supporting structured architecture cards and Crow's Foot ER diagrams, Dark/Light + Dots/Grid themes, scrollable tab bar (`Tab`/`Shift+Tab`), typo-tolerant fuzzy search, diagram export (`PNG`/`SVG`/`Mermaid`/`JSON`), Vite `manualChunks` splitting, and unit tests in `packages/ui/test/`.

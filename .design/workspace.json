@@ -16,11 +16,6 @@
       "view_id": "feedback_loop",
       "title": "Agent Iteration Flow",
       "order": 2
-    },
-    {
-      "view_id": "sandbox_coffee_shop",
-      "title": "Sandbox: Coffee Shop (Edit Me!)",
-      "order": 3
     }
   ],
   "view_requests": []
