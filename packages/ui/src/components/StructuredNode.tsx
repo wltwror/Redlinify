@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
   ChevronDown,
@@ -24,6 +24,7 @@ import {
   getCollapsedVisibleCount,
   getEffectiveNodeShape,
 } from "../layout/elk";
+import { OverflowTooltip } from "./OverflowTooltip";
 
 export interface StructuredNodeData extends Record<string, unknown> {
   node: DesignNode;
@@ -50,6 +51,7 @@ export interface StructuredNodeData extends Record<string, unknown> {
   ) => void;
   onInlineAddField: (nodeId: string, name: string) => void;
   onOpenNodeThreads: (nodeId: string) => void;
+  onExpandedChange?: (nodeId: string, expanded: boolean) => void;
 }
 
 export type StructuredFlowNode = Node<StructuredNodeData, "structured">;
@@ -125,12 +127,21 @@ function StructuredNodeComponent({
     onInlineUpdateFieldName,
     onInlineAddField,
     onOpenNodeThreads,
+    onExpandedChange,
   } = data;
 
   const [expandedSections, setExpandedSections] = useState<
     Record<string, boolean>
   >({});
   const [fieldsExpanded, setFieldsExpanded] = useState(false);
+  const isAnyExpanded =
+    fieldsExpanded || Object.values(expandedSections).some(Boolean);
+
+  useEffect(() => {
+    return () => {
+      onExpandedChange?.(node.id, false);
+    };
+  }, [node.id, onExpandedChange]);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(node.title);
   const [editingItem, setEditingItem] = useState<{
@@ -380,9 +391,11 @@ function StructuredNodeComponent({
           </div>
           {renderTitleBlock(true)}
           {node.summary && (
-            <p className="text-[10px] leading-tight text-slate-400 line-clamp-2">
-              {node.summary}
-            </p>
+            <OverflowTooltip text={node.summary} className="block w-full">
+              <p className="text-[10px] leading-tight text-slate-400 line-clamp-2">
+                {node.summary}
+              </p>
+            </OverflowTooltip>
           )}
           <div className="mt-0.5 flex items-center justify-center gap-1">
             {editedBadge}
@@ -417,17 +430,24 @@ function StructuredNodeComponent({
           </div>
           {renderTitleBlock(true)}
           {node.summary && (
-            <p className="text-[11px] text-slate-400 leading-snug line-clamp-2 max-w-[230px]">
-              {node.summary}
-            </p>
+            <OverflowTooltip text={node.summary} className="block max-w-[230px]">
+              <p className="text-[11px] text-slate-400 leading-snug line-clamp-2 max-w-[230px]">
+                {node.summary}
+              </p>
+            </OverflowTooltip>
           )}
           {(node.entity_ref || (node.code_refs && node.code_refs.length > 0)) && (
             <div className="flex items-center gap-2 text-[9.5px] font-mono text-slate-400">
               {node.entity_ref && (
-                <span className="inline-flex items-center gap-1 truncate max-w-[130px]">
-                  <Link2 className="h-2.5 w-2.5 shrink-0 text-sky-400" />
-                  {node.entity_ref}
-                </span>
+                <OverflowTooltip
+                  text={node.entity_ref}
+                  className="inline-flex min-w-0 max-w-[130px]"
+                >
+                  <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
+                    <Link2 className="h-2.5 w-2.5 shrink-0 text-sky-400" />
+                    <span className="truncate">{node.entity_ref}</span>
+                  </span>
+                </OverflowTooltip>
               )}
               {node.code_refs && node.code_refs.length > 0 && (
                 <span className="inline-flex items-center gap-1 text-emerald-300">
@@ -447,6 +467,7 @@ function StructuredNodeComponent({
   return (
     <div
       data-shape={effectiveShape}
+      data-expanded={isAnyExpanded ? "true" : undefined}
       className={
         isStore
           ? `group relative min-w-[270px] max-w-[350px] pt-5 pb-3 transition-all ${visibilityAndPulse}`
@@ -514,9 +535,11 @@ function StructuredNodeComponent({
         {renderTitleBlock(false)}
 
         {node.summary && (
-          <p className="mt-1 text-[11px] text-slate-400 leading-relaxed line-clamp-2">
-            {node.summary}
-          </p>
+          <OverflowTooltip text={node.summary} className="block w-full">
+            <p className="mt-1 text-[11px] text-slate-400 leading-relaxed line-clamp-2">
+              {node.summary}
+            </p>
+          </OverflowTooltip>
         )}
       </div>
 
@@ -535,7 +558,13 @@ function StructuredNodeComponent({
           {fields.length === 0 && !addingField ? (
             <p className="text-[11px] italic text-slate-600">No attributes</p>
           ) : (
-            <ul className="space-y-1">
+            <ul
+              className={
+                fieldsExpanded
+                  ? "space-y-1 max-h-[380px] overflow-y-auto nowheel pr-1"
+                  : "space-y-1"
+              }
+            >
               {visibleFields.map((field) => {
                 const isEditingThis = editingField?.fieldId === field.id;
                 return (
@@ -584,29 +613,40 @@ function StructuredNodeComponent({
                           className="nodrag w-full rounded border border-sky-500 bg-slate-950 px-1 py-0.2 font-mono text-[11px] text-slate-100 focus:outline-none"
                         />
                       ) : (
-                        <span
-                          onDoubleClick={(e) => {
-                            if (node.locked) return;
-                            e.stopPropagation();
-                            setEditingField({
-                              fieldId: field.id,
-                              draft: field.name,
-                            });
-                          }}
-                          title={
-                            node.locked
-                              ? "Locked entity"
-                              : "Double-click to edit (clear to delete)"
+                        <OverflowTooltip
+                          text={`${field.name}${field.type ? `: ${field.type}` : ""}${field.nullable ? " (nullable)" : " (NOT NULL)"}`}
+                          detail={
+                            [
+                              field.default_value
+                                ? `default: ${field.default_value}`
+                                : "",
+                              field.note ?? "",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || undefined
                           }
-                          className="truncate font-mono text-slate-100"
+                          alwaysShow={Boolean(field.default_value || field.note)}
+                          className="inline-flex min-w-0 max-w-full"
                         >
-                          {field.name}
-                          {field.type && (
-                            <span className="text-slate-400">
-                              : {field.type}
-                            </span>
-                          )}
-                        </span>
+                          <span
+                            onDoubleClick={(e) => {
+                              if (node.locked) return;
+                              e.stopPropagation();
+                              setEditingField({
+                                fieldId: field.id,
+                                draft: field.name,
+                              });
+                            }}
+                            className="truncate font-mono text-slate-100 max-w-full"
+                          >
+                            {field.name}
+                            {field.type && (
+                              <span className="text-slate-400">
+                                : {field.type}
+                              </span>
+                            )}
+                          </span>
+                        </OverflowTooltip>
                       )}
                     </div>
 
@@ -622,7 +662,11 @@ function StructuredNodeComponent({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setFieldsExpanded((v) => !v);
+                const nextFields = !fieldsExpanded;
+                setFieldsExpanded(nextFields);
+                const nextAny =
+                  nextFields || Object.values(expandedSections).some(Boolean);
+                onExpandedChange?.(node.id, nextAny);
               }}
               className="nodrag mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-sky-400 hover:bg-slate-800"
             >
@@ -721,7 +765,13 @@ function StructuredNodeComponent({
                 {section.items.length === 0 && addingSectionId !== section.id ? (
                   <p className="text-[11px] italic text-slate-600">No items</p>
                 ) : (
-                  <ul className="space-y-0.5">
+                  <ul
+                    className={
+                      isExpanded
+                        ? "space-y-0.5 max-h-[320px] overflow-y-auto nowheel pr-1"
+                        : "space-y-0.5"
+                    }
+                  >
                     {visibleItems.map((item, idx) => {
                       const activeItemEdit =
                         editingItem &&
@@ -752,25 +802,25 @@ function StructuredNodeComponent({
                               className="nodrag w-full rounded border border-sky-500 bg-slate-950 px-1.5 py-0.5 font-mono text-[11px] text-slate-100 focus:outline-none"
                             />
                           ) : (
-                            <div
-                              onDoubleClick={(e) => {
-                                if (node.locked) return;
-                                e.stopPropagation();
-                                setEditingItem({
-                                  sectionId: section.id,
-                                  index: idx,
-                                  draft: item,
-                                });
-                              }}
-                              title={
-                                node.locked
-                                  ? "Locked node"
-                                  : "Double-click to edit (clear to delete)"
-                              }
-                              className="truncate rounded px-1 py-0.5 font-mono text-[11px] text-slate-200 hover:bg-slate-800/70"
+                            <OverflowTooltip
+                              text={item}
+                              className="block min-w-0 w-full"
                             >
-                              {item}
-                            </div>
+                              <div
+                                onDoubleClick={(e) => {
+                                  if (node.locked) return;
+                                  e.stopPropagation();
+                                  setEditingItem({
+                                    sectionId: section.id,
+                                    index: idx,
+                                    draft: item,
+                                  });
+                                }}
+                                className="truncate rounded px-1 py-0.5 font-mono text-[11px] text-slate-200 hover:bg-slate-800/70"
+                              >
+                                {item}
+                              </div>
+                            </OverflowTooltip>
                           )}
                         </li>
                       );
@@ -802,10 +852,15 @@ function StructuredNodeComponent({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setExpandedSections((prev) => ({
-                        ...prev,
-                        [section.id]: !isExpanded,
-                      }));
+                      const nextSec = !isExpanded;
+                      const nextMap = {
+                        ...expandedSections,
+                        [section.id]: nextSec,
+                      };
+                      setExpandedSections(nextMap);
+                      const nextAny =
+                        fieldsExpanded || Object.values(nextMap).some(Boolean);
+                      onExpandedChange?.(node.id, nextAny);
                     }}
                     className="nodrag mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-sky-400 hover:bg-slate-800"
                   >
@@ -835,12 +890,17 @@ function StructuredNodeComponent({
               : "rounded-b-xl border-slate-800/90 bg-slate-950/60"
           }`}
         >
-          <div className="flex items-center gap-1 truncate">
+          <div className="flex items-center gap-1 truncate min-w-0 flex-1">
             {node.entity_ref && (
-              <span className="inline-flex items-center gap-1 truncate font-mono text-slate-400">
-                <Link2 className="h-2.5 w-2.5 shrink-0 text-sky-400" />
-                {node.entity_ref}
-              </span>
+              <OverflowTooltip
+                text={node.entity_ref}
+                className="inline-flex min-w-0 max-w-full"
+              >
+                <span className="inline-flex items-center gap-1 min-w-0 font-mono text-slate-400">
+                  <Link2 className="h-2.5 w-2.5 shrink-0 text-sky-400" />
+                  <span className="truncate">{node.entity_ref}</span>
+                </span>
+              </OverflowTooltip>
             )}
           </div>
           {node.code_refs && node.code_refs.length > 0 && (

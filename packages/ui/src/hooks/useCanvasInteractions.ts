@@ -38,6 +38,7 @@ interface UseCanvasInteractionsOptions {
   activeViewRef: RefBox<DesignView | null>;
   positionsRef: RefBox<Record<string, Point>>;
   edgeRoutesRef: RefBox<Record<string, EdgeRoute>>;
+  measuredSizesRef?: RefBox<Record<string, { width?: number; height?: number }>>;
   viewportReadyRef: RefBox<boolean>;
   pendingSelectNodeIdRef: RefBox<string | null>;
   selectedNodeId: string | null;
@@ -72,6 +73,7 @@ export function useCanvasInteractions({
   activeViewRef,
   positionsRef,
   edgeRoutesRef,
+  measuredSizesRef,
   viewportReadyRef,
   pendingSelectNodeIdRef,
   selectedNodeId,
@@ -575,6 +577,7 @@ export function useCanvasInteractions({
     (changes: NodeChange<StructuredFlowNode>[]) => {
       onNodesChange(changes);
       let moved = false;
+      let dimsChanged = false;
       for (const ch of changes) {
         if (ch.type === "position" && ch.position) {
           positionsRef.current[ch.id] = {
@@ -582,14 +585,40 @@ export function useCanvasInteractions({
             y: Math.round(ch.position.y),
           };
           moved = true;
+        } else if (
+          ch.type === "dimensions" &&
+          ch.dimensions &&
+          ch.dimensions.width > 0 &&
+          ch.dimensions.height > 0 &&
+          measuredSizesRef
+        ) {
+          const w = Math.round(ch.dimensions.width);
+          const h = Math.round(ch.dimensions.height);
+          const prev = measuredSizesRef.current[ch.id];
+          if (
+            !prev ||
+            Math.abs((prev.width ?? 0) - w) >= 2 ||
+            Math.abs((prev.height ?? 0) - h) >= 2
+          ) {
+            measuredSizesRef.current[ch.id] = { width: w, height: h };
+            dimsChanged = true;
+          }
         }
       }
       if (moved) {
         applyAutoMoveWaypoints();
+      }
+      if (moved || dimsChanged) {
         setRoutingTick((t) => t + 1);
       }
     },
-    [applyAutoMoveWaypoints, onNodesChange, positionsRef, setRoutingTick],
+    [
+      applyAutoMoveWaypoints,
+      measuredSizesRef,
+      onNodesChange,
+      positionsRef,
+      setRoutingTick,
+    ],
   );
 
   const finalizeDraggedNodes = useCallback(
