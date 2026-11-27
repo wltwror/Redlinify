@@ -40,6 +40,7 @@ import {
   reorderWorkspaceTabs,
   type TabStatusSummary,
 } from "../api/client";
+import type { ElkAutoEdgeRoute } from "../layout/elk";
 import { computeSmartEdgeRouting, type Point } from "../layout/routing";
 import { useCanvasContextMenu } from "../hooks/useCanvasContextMenu";
 import { useCanvasInteractions } from "../hooks/useCanvasInteractions";
@@ -120,10 +121,22 @@ function WorkbenchInner() {
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
   const [appliedLayoutVersion, setAppliedLayoutVersion] = useState(0);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
+  const measuredSizesRef = useRef<
+    Record<string, { width?: number; height?: number }>
+  >({});
+  const elkRoutesRef = useRef<Record<string, ElkAutoEdgeRoute>>({});
+  const expandedNodeIdsRef = useRef<Record<string, boolean>>({});
+  expandedNodeIdsRef.current = expandedNodeIds;
+  const focusNodeIdRef = useRef<string | null>(null);
+  focusNodeIdRef.current = hoveredNodeId ?? selectedNodeId;
   const viewportReadyRef = useRef(false);
   const viewportSyncTokenRef = useRef(0);
   const activeViewIdRef = useRef<string | null>(null);
@@ -177,6 +190,8 @@ function WorkbenchInner() {
     activeViewRef,
     positionsRef,
     edgeRoutesRef,
+    measuredSizesRef,
+    elkRoutesRef,
     viewportReadyRef,
     getViewport,
     pushHistoryEntry,
@@ -293,6 +308,7 @@ function WorkbenchInner() {
     activeViewRef,
     positionsRef,
     edgeRoutesRef,
+    measuredSizesRef,
     viewportReadyRef,
     pendingSelectNodeIdRef,
     selectedNodeId,
@@ -360,8 +376,28 @@ function WorkbenchInner() {
 
   const handleDragStart = useCallback(() => {
     clearContextMenu();
+    setHoveredNodeId(null);
     snapshotDragOrigin();
   }, [clearContextMenu, snapshotDragOrigin]);
+
+  const handleExpandedChange = useCallback(
+    (nodeId: string, expanded: boolean) => {
+      setExpandedNodeIds((prev) => {
+        if (Boolean(prev[nodeId]) === expanded) return prev;
+        if (!expanded) {
+          const { [nodeId]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [nodeId]: true };
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setExpandedNodeIds({});
+    setHoveredNodeId(null);
+  }, [activeView?.id]);
 
   const handleSelectView = useCallback(
     async (viewId: string) => {
@@ -630,6 +666,7 @@ function WorkbenchInner() {
         const selected = pendingSelectId
           ? node.id === pendingSelectId
           : Boolean(existing?.selected);
+        const zIndex = expandedNodeIdsRef.current[node.id] ? 1200 : undefined;
 
         return {
           ...(existing ?? {}),
@@ -637,6 +674,7 @@ function WorkbenchInner() {
           type: "structured",
           position: positionsRef.current[node.id] ?? { x: 40, y: 40 },
           selected,
+          zIndex,
           data: {
             node,
             diagramType: activeView.diagram_type ?? "general",
@@ -653,6 +691,7 @@ function WorkbenchInner() {
             onInlineUpdateFieldName: handleInlineUpdateFieldName,
             onInlineAddField: handleInlineAddField,
             onOpenNodeThreads: handleOpenNodeThreads,
+            onExpandedChange: handleExpandedChange,
           },
         };
       });
@@ -663,6 +702,7 @@ function WorkbenchInner() {
     allThreads,
     editedNodeIds,
     filter,
+    handleExpandedChange,
     handleInlineAddField,
     handleInlineAddItem,
     handleInlineToggleFieldNullable,
@@ -675,6 +715,20 @@ function WorkbenchInner() {
     pulsingNodeId,
     setRfNodes,
   ]);
+
+  // Keep expanded ER cards & sections stacked cleanly above neighboring boxes
+  useEffect(() => {
+    setRfNodes((prev) => {
+      let changed = false;
+      const next = prev.map((n) => {
+        const targetZ = expandedNodeIds[n.id] ? 1200 : undefined;
+        if (n.zIndex === targetZ) return n;
+        changed = true;
+        return { ...n, zIndex: targetZ };
+      });
+      return changed ? next : prev;
+    });
+  }, [expandedNodeIds, setRfNodes]);
 
   // Execute pending viewport fit/restore strictly after StoreUpdater commits updated rfNodes
   useEffect(() => {
@@ -734,12 +788,15 @@ function WorkbenchInner() {
       activeView,
       positionsRef.current,
       edgeRoutesRef.current,
+      measuredSizesRef.current,
+      elkRoutesRef.current,
     );
 
     const pendingSelectId = pendingSelectEdgeIdRef.current;
     pendingSelectEdgeIdRef.current = null;
     const sameView = lastSyncedEdgesViewIdRef.current === activeView.id;
     lastSyncedEdgesViewIdRef.current = activeView.id;
+    const focusNodeId = focusNodeIdRef.current;
 
     setRfEdges((prev) => {
       const prevById = sameView
@@ -753,6 +810,10 @@ function WorkbenchInner() {
         const selected = pendingSelectId
           ? edge.id === pendingSelectId
           : Boolean(existing?.selected);
+        const highlighted =
+          focusNodeId !== null &&
+          (edge.source === focusNodeId || edge.target === focusNodeId);
+        const softDimmed = focusNodeId !== null && !highlighted;
 
         return {
           ...(existing ?? {}),
@@ -763,11 +824,14 @@ function WorkbenchInner() {
           targetHandle: route?.targetHandle ?? "left",
           type: "step",
           selected,
+          zIndex: selected ? 1000 : highlighted ? 900 : 0,
           data: {
             edge,
             diagramType,
             dimmed:
               dimmedNodeIds.has(edge.source) && dimmedNodeIds.has(edge.target),
+            highlighted,
+            softDimmed,
             sourcePortOffset: route?.sourcePortOffset ?? 0,
             targetPortOffset: route?.targetPortOffset ?? 0,
             manualWaypoints: route?.manualWaypoints ?? [],
@@ -788,6 +852,39 @@ function WorkbenchInner() {
     routingTick,
     setRfEdges,
   ]);
+
+  // Lightweight hover/selection edge emphasis without recomputing corridor routing
+  useEffect(() => {
+    const focusNodeId = hoveredNodeId ?? selectedNodeId;
+    setRfEdges((prev) => {
+      let changed = false;
+      const next = prev.map((e) => {
+        const highlighted =
+          focusNodeId !== null &&
+          (e.source === focusNodeId || e.target === focusNodeId);
+        const softDimmed = focusNodeId !== null && !highlighted;
+        const targetZ = e.selected ? 1000 : highlighted ? 900 : 0;
+        if (
+          Boolean(e.data?.highlighted) === highlighted &&
+          Boolean(e.data?.softDimmed) === softDimmed &&
+          (e.zIndex ?? 0) === targetZ
+        ) {
+          return e;
+        }
+        changed = true;
+        return {
+          ...e,
+          zIndex: targetZ,
+          data: {
+            ...(e.data as NonNullable<StepFlowEdge["data"]>),
+            highlighted,
+            softDimmed,
+          },
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [hoveredNodeId, selectedNodeId, setRfEdges]);
 
   const selectedNode = useMemo(
     () => activeView?.nodes.find((n) => n.id === selectedNodeId) ?? null,
@@ -847,6 +944,7 @@ function WorkbenchInner() {
   const handleEdgeClick = useCallback(
     (e: ReactMouseEvent, edge: StepFlowEdge) => {
       clearContextMenu();
+      setHoveredNodeId(null);
       if (e.ctrlKey || e.metaKey || e.shiftKey) return;
       setSelectedEdgeId(edge.id);
       setSelectedNodeId(null);
@@ -858,12 +956,27 @@ function WorkbenchInner() {
 
   const handlePaneClick = useCallback(() => {
     clearContextMenu();
+    setHoveredNodeId(null);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     if (drawerMode === "node" || drawerMode === "edge") {
       setDrawerMode("none");
     }
   }, [clearContextMenu, drawerMode]);
+
+  const handleNodeMouseEnter = useCallback(
+    (_event: ReactMouseEvent, node: StructuredFlowNode) => {
+      setHoveredNodeId(node.id);
+    },
+    [],
+  );
+
+  const handleNodeMouseLeave = useCallback(
+    (_event: ReactMouseEvent, node: StructuredFlowNode) => {
+      setHoveredNodeId((prev) => (prev === node.id ? null : prev));
+    },
+    [],
+  );
 
   const miniMapNodeColor = useCallback(
     (n: StructuredFlowNode) => {
@@ -1021,6 +1134,8 @@ function WorkbenchInner() {
               onConnectStart={clearContextMenu}
               onConnect={handleConnect}
               onNodeClick={handleNodeClick}
+              onNodeMouseEnter={handleNodeMouseEnter}
+              onNodeMouseLeave={handleNodeMouseLeave}
               onEdgeClick={handleEdgeClick}
               onPaneClick={handlePaneClick}
               onPaneContextMenu={handlePaneContextMenu}
