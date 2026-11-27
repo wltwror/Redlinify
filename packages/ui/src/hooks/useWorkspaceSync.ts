@@ -58,6 +58,7 @@ export function useWorkspaceSync({
   const [activeView, setActiveView] = useState<DesignView | null>(null);
   const [viewHash, setViewHash] = useState<string | undefined>(undefined);
   const [viewDiff, setViewDiff] = useState<SemanticDiff | null>(null);
+  const [viewBaseline, setViewBaseline] = useState<DesignView | null>(null);
   const [allThreads, setAllThreads] = useState<DesignThread[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [wsEverConnected, setWsEverConnected] = useState(false);
@@ -168,6 +169,7 @@ export function useWorkspaceSync({
       setActiveView(detail.view);
       setViewHash(detail.view_hash);
       setViewDiff(detail.diff);
+      setViewBaseline(detail.baseline ?? null);
       setConflictBanner(false);
       setLayoutVersion(targetLayoutVersion);
       setRoutingTick((t) => t + 1);
@@ -240,6 +242,7 @@ export function useWorkspaceSync({
           setActiveView(null);
           setViewHash(undefined);
           setViewDiff(null);
+          setViewBaseline(null);
         }
         showToast(
           `Server switched to project "${ws.status.project_name}"`,
@@ -340,6 +343,9 @@ export function useWorkspaceSync({
           setActiveView(saved.view);
           setViewHash(saved.view_hash);
           setViewDiff(saved.diff);
+          if (saved.baseline !== undefined) {
+            setViewBaseline(saved.baseline);
+          }
           setConflictBanner(false);
           await loadWorkspaceMeta();
         } catch (err) {
@@ -392,6 +398,7 @@ export function useWorkspaceSync({
     setActiveView,
     viewDiff,
     setViewDiff,
+    viewBaseline,
     allThreads,
     wsConnected,
     wsEverConnected,

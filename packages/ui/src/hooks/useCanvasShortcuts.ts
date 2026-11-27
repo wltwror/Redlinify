@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Connection } from "@xyflow/react";
 import type { TabStatusSummary } from "../api/client";
 import type { ArrowDirectionKey } from "./useViewportNavigation";
@@ -23,6 +23,10 @@ function isArrowDirectionKey(key: string): key is ArrowDirectionKey {
   );
 }
 
+function isSpaceEvent(e: KeyboardEvent): boolean {
+  return e.code === "Space" || e.key === " ";
+}
+
 interface UseCanvasShortcutsOptions {
   activeViewIdRef: { current: string | null };
   tabs: TabStatusSummary[];
@@ -34,6 +38,8 @@ interface UseCanvasShortcutsOptions {
   handleSelectView: (viewId: string) => Promise<void>;
   handleUndo: () => Promise<void>;
   handleRedo: () => Promise<void>;
+  handleAutoLayout: () => Promise<void>;
+  handleAddBoxAtCursor: () => Promise<void>;
   startArrowPan: (key: ArrowDirectionKey, shiftKey: boolean) => void;
   stopArrowPan: (key: ArrowDirectionKey) => void;
   updateArrowShift: (shiftKey: boolean) => void;
@@ -45,9 +51,10 @@ interface UseCanvasShortcutsOptions {
 }
 
 /**
- * Global keyboard shortcuts: Ctrl/Cmd+K or '/' (Search), Tab / Shift+Tab
- * (Cycle tabs), Ctrl/Cmd+Z / Ctrl+Shift+Z / Ctrl+Y (Undo/Redo), plus canvas
- * zoom (+, -, 0/Shift+1, 1) and tap-or-hold arrow-key viewport panning.
+ * Global keyboard shortcuts: Ctrl/Cmd+K or '/' (Search), Tab / Shift+Tab / 1-9
+ * (Switch tabs), r (Auto-layout), n (New box at cursor), Ctrl/Cmd+Z / Ctrl+Shift+Z /
+ * Ctrl+Y (Undo/Redo), Space tap / 0 / Shift+1 (Fit whole view; Space+drag pans),
+ * +, -, Shift+0 / Ctrl+0 (Zoom / Reset 100%), and arrow-key panning.
  */
 export function useCanvasShortcuts({
   activeViewIdRef,
@@ -60,6 +67,8 @@ export function useCanvasShortcuts({
   handleSelectView,
   handleUndo,
   handleRedo,
+  handleAutoLayout,
+  handleAddBoxAtCursor,
   startArrowPan,
   stopArrowPan,
   updateArrowShift,
@@ -69,13 +78,24 @@ export function useCanvasShortcuts({
   handleFitView,
   handleResetZoom,
 }: UseCanvasShortcutsOptions) {
+  const spaceHeldRef = useRef(false);
+  const spaceDraggedRef = useRef(false);
+
   useEffect(() => {
     if (searchOpen || pendingConn) {
       stopAllArrowPan();
+      spaceHeldRef.current = false;
+      spaceDraggedRef.current = false;
     }
   }, [pendingConn, searchOpen, stopAllArrowPan]);
 
   useEffect(() => {
+    const onPointerDown = () => {
+      if (spaceHeldRef.current) {
+        spaceDraggedRef.current = true;
+      }
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       const hasOpenDialog = Boolean(document.querySelector('[role="dialog"]'));
@@ -127,6 +147,39 @@ export function useCanvasShortcuts({
       }
 
       if (!pendingConn && !hasOpenDialog && !e.altKey) {
+        if (!mod && !e.shiftKey && isSpaceEvent(e)) {
+          e.preventDefault();
+          if (!e.repeat) {
+            spaceHeldRef.current = true;
+            spaceDraggedRef.current = false;
+          }
+          return;
+        }
+
+        if (!mod && !e.shiftKey && e.key >= "1" && e.key <= "9") {
+          const targetTab = tabs[Number(e.key) - 1];
+          if (targetTab) {
+            e.preventDefault();
+            clearContextMenu();
+            void handleSelectView(targetTab.view_id);
+          }
+          return;
+        }
+
+        if (!mod && !e.shiftKey && !e.repeat && e.key.toLowerCase() === "r") {
+          e.preventDefault();
+          clearContextMenu();
+          void handleAutoLayout();
+          return;
+        }
+
+        if (!mod && !e.shiftKey && !e.repeat && e.key.toLowerCase() === "n") {
+          e.preventDefault();
+          clearContextMenu();
+          void handleAddBoxAtCursor();
+          return;
+        }
+
         if (e.key === "+" || e.key === "=") {
           e.preventDefault();
           handleZoomIn();
@@ -138,16 +191,19 @@ export function useCanvasShortcuts({
           return;
         }
         if (
-          e.key === "0" ||
+          (!mod && e.shiftKey && (e.key === ")" || e.code === "Digit0")) ||
+          (mod && !e.shiftKey && (e.key === "0" || e.code === "Digit0"))
+        ) {
+          e.preventDefault();
+          handleResetZoom();
+          return;
+        }
+        if (
+          (!mod && !e.shiftKey && e.key === "0") ||
           (!mod && e.shiftKey && (e.key === "!" || e.code === "Digit1"))
         ) {
           e.preventDefault();
           handleFitView();
-          return;
-        }
-        if (!mod && !e.shiftKey && e.key === "1") {
-          e.preventDefault();
-          handleResetZoom();
           return;
         }
       }
@@ -185,6 +241,22 @@ export function useCanvasShortcuts({
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
+      if (isSpaceEvent(e) && spaceHeldRef.current) {
+        e.preventDefault();
+        const dragged = spaceDraggedRef.current;
+        spaceHeldRef.current = false;
+        spaceDraggedRef.current = false;
+        if (
+          !dragged &&
+          !searchOpen &&
+          !isEditableFocus() &&
+          !pendingConn &&
+          !document.querySelector('[role="dialog"]')
+        ) {
+          handleFitView();
+        }
+        return;
+      }
       if (isArrowDirectionKey(e.key)) {
         stopArrowPan(e.key);
       } else if (e.key === "Shift") {
@@ -193,13 +265,17 @@ export function useCanvasShortcuts({
     };
 
     const onBlur = () => {
+      spaceHeldRef.current = false;
+      spaceDraggedRef.current = false;
       stopAllArrowPan();
     };
 
+    window.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
@@ -207,6 +283,8 @@ export function useCanvasShortcuts({
   }, [
     activeViewIdRef,
     clearContextMenu,
+    handleAddBoxAtCursor,
+    handleAutoLayout,
     handleFitView,
     handleRedo,
     handleResetZoom,

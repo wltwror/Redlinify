@@ -421,7 +421,14 @@ export async function createWebServer(
               view,
             );
             const diff = computeSemanticDiff(baseline, view);
-            sendJson(res, 200, { view, view_hash, layout, diff, threads });
+            sendJson(res, 200, {
+              view,
+              view_hash,
+              layout,
+              diff,
+              baseline,
+              threads,
+            });
             return;
           }
           if (method === "PUT") {
@@ -458,6 +465,7 @@ export async function createWebServer(
               view: saved.view,
               view_hash: saved.view_hash,
               diff,
+              baseline,
             });
             return;
           }

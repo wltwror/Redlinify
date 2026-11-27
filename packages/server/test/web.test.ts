@@ -165,9 +165,20 @@ describe("Redlinify HTTP + WebSocket server", () => {
     const saved = (await validPut.json()) as {
       view: DesignView;
       diff: { has_changes: boolean };
+      baseline: DesignView | null;
     };
     expect(saved.view.title).toBe("Updated Classes");
     expect(saved.diff.has_changes).toBe(true);
+    expect(saved.baseline?.title).toBe("Classes");
+
+    const afterPutGet = await fetch(`${server.url}/api/views/classes`);
+    expect(afterPutGet.status).toBe(200);
+    const afterPutJson = (await afterPutGet.json()) as {
+      view: DesignView;
+      baseline: DesignView | null;
+    };
+    expect(afterPutJson.view.title).toBe("Updated Classes");
+    expect(afterPutJson.baseline?.title).toBe("Classes");
 
     // Cross-links lookup across tabs
     const linksRes = await fetch(`${server.url}/api/cross-links/dedup_engine`);

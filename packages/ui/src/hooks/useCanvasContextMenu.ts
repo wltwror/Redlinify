@@ -12,11 +12,13 @@ import type {
   EdgeRoute,
   HandleSide,
   NodeShape,
+  SemanticDiff,
 } from "@redlinify/shared/browser";
 import { NODE_SHAPE_OPTIONS } from "../layout/elk";
 import type { ContextMenuItem } from "../components/ContextMenu";
 import type { StepFlowEdge } from "../components/StepEdge";
 import type { StructuredFlowNode } from "../components/StructuredNode";
+import type { TriageFilter } from "../components/TriageBar";
 import type {
   DrawerMode,
   ElementDrawerTab,
@@ -35,6 +37,11 @@ interface RefBox<T> {
 
 interface UseCanvasContextMenuOptions {
   activeView: DesignView | null;
+  filter: TriageFilter;
+  viewDiff: SemanticDiff | null;
+  viewBaseline: DesignView | null;
+  editedNodeIds: Set<string>;
+  editedEdgeIds: Set<string>;
   positionsRef: RefBox<Record<string, Point>>;
   edgeRoutesRef: RefBox<Record<string, EdgeRoute>>;
   undoMapRef: RefBox<Map<string, HistoryEntry[]>>;
@@ -57,6 +64,14 @@ interface UseCanvasContextMenuOptions {
   handleToggleDirection: () => Promise<void>;
   handleUndo: () => Promise<void>;
   handleRedo: () => Promise<void>;
+  handleRevertNode: (nodeId: string) => Promise<void>;
+  handleRevertEdge: (edgeId: string) => Promise<void>;
+  handleRevertViewToBaseline: () => Promise<void>;
+  handleUnlockAllInView: () => Promise<void>;
+  handleUpdateNodeStatus: (
+    nodeId: string,
+    status: DesignNode["status"],
+  ) => Promise<void>;
   handleToggleLock: (nodeId: string) => void;
   handleInlineAddItem: (
     nodeId: string,
@@ -82,6 +97,11 @@ interface UseCanvasContextMenuOptions {
 
 export function useCanvasContextMenu({
   activeView,
+  filter,
+  viewDiff,
+  viewBaseline,
+  editedNodeIds,
+  editedEdgeIds,
   positionsRef,
   edgeRoutesRef,
   undoMapRef,
@@ -104,6 +124,11 @@ export function useCanvasContextMenu({
   handleToggleDirection,
   handleUndo,
   handleRedo,
+  handleRevertNode,
+  handleRevertEdge,
+  handleRevertViewToBaseline,
+  handleUnlockAllInView,
+  handleUpdateNodeStatus,
   handleToggleLock,
   handleInlineAddItem,
   handleInlineAddField,
@@ -217,12 +242,48 @@ export function useCanvasContextMenu({
     const redoStack = redoMapRef.current.get(activeView.id) ?? [];
 
     if (contextMenu.kind === "pane") {
+      const removedNodes = viewDiff?.nodes_removed ?? [];
+      const hasLockedInView =
+        activeView.nodes.some((n) => n.locked) ||
+        activeView.edges.some((e) => e.locked);
+      const revertPaneItems: ContextMenuItem[] = [];
+      if (removedNodes.length > 0 && viewBaseline) {
+        revertPaneItems.push({
+          id: "restore_removed_nodes",
+          label: isEr ? "Restore Removed Entity…" : "Restore Removed Box…",
+          dividerBefore: true,
+          children: removedNodes.map((rem) => ({
+            id: `restore_removed_${rem.id}`,
+            label: rem.title,
+            onSelect: () => void handleRevertNode(rem.id),
+          })),
+        });
+      }
+      if (viewDiff?.has_changes && viewBaseline) {
+        revertPaneItems.push({
+          id: "revert_view_baseline",
+          label: "Revert All Unsynced Edits",
+          danger: true,
+          dividerBefore: revertPaneItems.length === 0,
+          onSelect: () => void handleRevertViewToBaseline(),
+        });
+      }
+      if (filter === "locked" && hasLockedInView) {
+        revertPaneItems.push({
+          id: "unlock_all_view",
+          label: "Unlock All in View",
+          dividerBefore: revertPaneItems.length === 0,
+          onSelect: () => void handleUnlockAllInView(),
+        });
+      }
+
       return {
         header: activeView.title,
         items: [
           {
             id: "add_box",
             label: isEr ? "Add Entity Here" : "Add Box Here",
+            shortcut: "N",
             onSelect: () => void createBoxAtPosition(contextMenu.flowPos),
           },
           ...(isEr
@@ -242,6 +303,7 @@ export function useCanvasContextMenu({
           {
             id: "auto_layout",
             label: "Auto-Layout & Reset Routes",
+            shortcut: "R",
             dividerBefore: true,
             onSelect: () => void handleAutoLayout(),
           },
@@ -265,6 +327,7 @@ export function useCanvasContextMenu({
             disabled: redoStack.length === 0,
             onSelect: () => void handleRedo(),
           },
+          ...revertPaneItems,
         ],
       };
     }
@@ -346,8 +409,67 @@ export function useCanvasContextMenu({
         ];
       })();
 
+      const isHumanEdited = editedNodeIds.has(node.id);
+      const isAddedInSession = Boolean(
+        viewDiff?.nodes_added.some((n) => n.id === node.id),
+      );
+      const hasBaselineNode = Boolean(
+        viewBaseline?.nodes.some((n) => n.id === node.id),
+      );
+      const canRevertNode =
+        isHumanEdited && (isAddedInSession || hasBaselineNode);
+
+      const revertNodeItem: ContextMenuItem | null = canRevertNode
+        ? {
+            id: "revert_to_unmodified",
+            label: isAddedInSession
+              ? isEr
+                ? "Discard Added Entity"
+                : "Discard Added Box"
+              : isEr
+                ? "Revert Entity to Unmodified"
+                : "Revert Box to Unmodified",
+            danger: isAddedInSession,
+            onSelect: () => void handleRevertNode(node.id),
+          }
+        : null;
+
+      const triageLeadingItems: ContextMenuItem[] = [];
+      if (filter === "my_edits" && revertNodeItem) {
+        triageLeadingItems.push(revertNodeItem);
+      } else if (filter === "waiting_on_me") {
+        triageLeadingItems.push({
+          id: "answer_open_question",
+          label: "Answer Open Question",
+          onSelect: () => handleOpenNodeThreads(node.id),
+        });
+      } else if (filter === "drifted" || node.status === "drifted") {
+        triageLeadingItems.push(
+          {
+            id: "mark_implemented",
+            label: "Mark as Implemented",
+            disabled: node.status === "implemented",
+            onSelect: () =>
+              void handleUpdateNodeStatus(node.id, "implemented"),
+          },
+          {
+            id: "mark_approved",
+            label: "Mark as Approved",
+            disabled: node.status === "approved",
+            onSelect: () => void handleUpdateNodeStatus(node.id, "approved"),
+          },
+        );
+      }
+
       const items: ContextMenuItem[] = [
-        ...addEntryMenuItems,
+        ...triageLeadingItems.map((item, idx) =>
+          idx === 0 ? item : item,
+        ),
+        ...(triageLeadingItems.length > 0 && addEntryMenuItems.length > 0
+          ? addEntryMenuItems.map((item, idx) =>
+              idx === 0 ? { ...item, dividerBefore: true } : item,
+            )
+          : addEntryMenuItems),
         ...(isEr
           ? []
           : [
@@ -443,6 +565,9 @@ export function useCanvasContextMenu({
           label: "Open Threads",
           onSelect: () => handleOpenNodeThreads(node.id),
         },
+        ...(filter !== "my_edits" && revertNodeItem
+          ? [{ ...revertNodeItem, dividerBefore: true }]
+          : []),
         {
           id: "delete",
           label: isEr ? "Delete Entity" : "Delete Box",
@@ -477,10 +602,28 @@ export function useCanvasContextMenu({
 
     const edge = activeView.edges.find((e) => e.id === contextMenu.edgeId);
     if (!edge) return null;
+    const isEdgeEdited = editedEdgeIds.has(edge.id);
+    const isEdgeAdded = Boolean(
+      viewDiff?.edges_added.some((e) => e.id === edge.id),
+    );
+    const canRevertEdge =
+      isEdgeEdited &&
+      (isEdgeAdded || Boolean(viewBaseline?.edges.some((e) => e.id === edge.id)));
+    const revertEdgeItem: ContextMenuItem | null = canRevertEdge
+      ? {
+          id: "revert_edge_to_unmodified",
+          label: isEdgeAdded ? "Discard Added Edge" : "Revert Edge to Unmodified",
+          danger: isEdgeAdded,
+          onSelect: () => void handleRevertEdge(edge.id),
+        }
+      : null;
+
     const edgeItems: ContextMenuItem[] = [
+      ...(filter === "my_edits" && revertEdgeItem ? [revertEdgeItem] : []),
       {
         id: "add_bend",
         label: "Add Bend Point Here",
+        dividerBefore: filter === "my_edits" && Boolean(revertEdgeItem),
         onSelect: () => {
           const measuredMap: Record<
             string,
@@ -556,6 +699,9 @@ export function useCanvasContextMenu({
           });
         },
       },
+      ...(filter !== "my_edits" && revertEdgeItem
+        ? [{ ...revertEdgeItem, dividerBefore: true }]
+        : []),
       {
         id: "delete_edge",
         label: "Delete Edge",
@@ -580,6 +726,9 @@ export function useCanvasContextMenu({
     contextMenu,
     createBoxAtPosition,
     edgeRoutesRef,
+    editedEdgeIds,
+    editedNodeIds,
+    filter,
     handleAutoLayout,
     handleChangeNodeShape,
     handleCommitWaypoints,
@@ -588,10 +737,15 @@ export function useCanvasContextMenu({
     handleInlineAddItem,
     handleOpenNodeThreads,
     handleRedo,
+    handleRevertEdge,
+    handleRevertNode,
+    handleRevertViewToBaseline,
     handleToggleDirection,
     handleToggleLock,
     handleUndo,
+    handleUnlockAllInView,
     handleUpdateEdgeRoute,
+    handleUpdateNodeStatus,
     historyTick,
     persistCurrentLayout,
     persistView,
@@ -608,6 +762,8 @@ export function useCanvasContextMenu({
     setSelectedNodeId,
     showToast,
     undoMapRef,
+    viewBaseline,
+    viewDiff,
   ]);
 
   return {

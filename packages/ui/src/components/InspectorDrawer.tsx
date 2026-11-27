@@ -29,10 +29,13 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
     edgeRoute,
     allThreads,
     viewDiff,
+    viewBaseline = null,
     pendingFeedback,
     status,
     onSaveNode,
     onDeleteNode,
+    onRevertNode,
+    onRevertView,
     onSaveEdge,
     onDeleteEdge,
     onUpdateEdgeRoute,
@@ -290,9 +293,12 @@ export function InspectorDrawer(props: InspectorDrawerProps) {
             <WorkspacePendingTab
               activeView={activeView}
               viewDiff={viewDiff}
+              viewBaseline={viewBaseline}
               pendingFeedback={pendingFeedback}
               onOpenTab={onOpenTab}
               onJumpToTarget={onJumpToTarget}
+              onRevertNode={onRevertNode}
+              onRevertView={onRevertView}
               onCopyText={copyText}
             />
           )}

@@ -1,6 +1,7 @@
-import { AlertTriangle, Copy } from "lucide-react";
+import { AlertTriangle, Copy, RotateCcw } from "lucide-react";
 import type { DesignView, SemanticDiff } from "@redlinify/shared/browser";
 import type { PendingFeedbackResult } from "../../api/client";
+import { summarizeEdgeDiff, summarizeNodeDiff } from "../../utils/diffSummary";
 import type { InspectorDrawerProps } from "./types";
 
 function buildAgentPrompt(pendingFeedback: PendingFeedbackResult): string {
@@ -48,18 +49,24 @@ function buildAgentPrompt(pendingFeedback: PendingFeedbackResult): string {
 interface WorkspacePendingTabProps {
   activeView: DesignView | null;
   viewDiff: SemanticDiff | null;
+  viewBaseline?: DesignView | null;
   pendingFeedback: PendingFeedbackResult;
   onOpenTab: (viewId: string) => void;
   onJumpToTarget: InspectorDrawerProps["onJumpToTarget"];
+  onRevertNode?: (nodeId: string) => Promise<void>;
+  onRevertView?: () => Promise<void>;
   onCopyText: (text: string, label: string) => Promise<void>;
 }
 
 export function WorkspacePendingTab({
   activeView,
   viewDiff,
+  viewBaseline = null,
   pendingFeedback,
   onOpenTab,
   onJumpToTarget,
+  onRevertNode,
+  onRevertView,
   onCopyText,
 }: WorkspacePendingTabProps) {
   return (
@@ -92,53 +99,167 @@ export function WorkspacePendingTab({
         </div>
       ) : (
         <>
-          {pendingFeedback.view_diffs.map(({ view_id, diff }) => (
-            <div
-              key={view_id}
-              className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-sky-300 font-mono">
-                  {view_id}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onOpenTab(view_id)}
-                  className="text-[11px] text-sky-400 hover:underline"
-                >
-                  Open tab
-                </button>
+          {pendingFeedback.view_diffs.map(({ view_id, diff }) => {
+            const isCurrentView = activeView?.id === view_id;
+            const diagramType = isCurrentView
+              ? (activeView.diagram_type ?? "general")
+              : "general";
+            return (
+              <div
+                key={view_id}
+                className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-sky-300 font-mono">
+                    {view_id}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {isCurrentView && viewBaseline && onRevertView && (
+                      <button
+                        type="button"
+                        onClick={() => void onRevertView()}
+                        title="Revert all unsynced changes in this view to checkpoint"
+                        className="inline-flex items-center gap-1 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:border-sky-500/60 hover:text-sky-300"
+                      >
+                        <RotateCcw className="h-2.5 w-2.5" />
+                        Revert view
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onOpenTab(view_id)}
+                      className="text-[11px] text-sky-400 hover:underline"
+                    >
+                      {isCurrentView ? "Active" : "Open tab"}
+                    </button>
+                  </div>
+                </div>
+                <ul className="space-y-1.5 text-xs text-slate-300">
+                  {Object.keys(diff.view_meta_changed).length > 0 && (
+                    <li>• View title/direction updated</li>
+                  )}
+                  {diff.nodes_added.map((n) => (
+                    <li
+                      key={n.id}
+                      className="flex items-center justify-between gap-2 text-emerald-300"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onJumpToTarget(view_id, "node", n.id, "spec")
+                        }
+                        className="truncate text-left hover:underline"
+                      >
+                        + Added: {n.title}
+                      </button>
+                      {isCurrentView && onRevertNode && (
+                        <button
+                          type="button"
+                          onClick={() => void onRevertNode(n.id)}
+                          className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:border-rose-500/60 hover:text-rose-200"
+                        >
+                          Discard
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                  {diff.nodes_modified.map((n) => {
+                    const summaryLines = summarizeNodeDiff(
+                      diff,
+                      n.id,
+                      diagramType,
+                    );
+                    return (
+                      <li key={n.id} className="space-y-0.5 text-sky-200">
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onJumpToTarget(view_id, "node", n.id, "spec")
+                            }
+                            className="truncate text-left hover:underline"
+                          >
+                            ~ Modified: {n.title}
+                          </button>
+                          {isCurrentView && viewBaseline && onRevertNode && (
+                            <button
+                              type="button"
+                              onClick={() => void onRevertNode(n.id)}
+                              className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:border-sky-500/60 hover:text-sky-200"
+                            >
+                              Revert
+                            </button>
+                          )}
+                        </div>
+                        {summaryLines.length > 0 && (
+                          <ul className="ml-3 space-y-0.5 text-[11px] font-mono text-slate-400">
+                            {summaryLines.map((line, idx) => (
+                              <li key={idx} className="truncate">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                  {diff.nodes_removed.map((n) => (
+                    <li
+                      key={n.id}
+                      className="flex items-center justify-between gap-2 text-rose-300"
+                    >
+                      <span className="truncate">- Removed: {n.title}</span>
+                      {isCurrentView && viewBaseline && onRevertNode && (
+                        <button
+                          type="button"
+                          onClick={() => void onRevertNode(n.id)}
+                          className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300 hover:border-emerald-500/60 hover:text-emerald-200"
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                  {diff.edges_added.map((e) => (
+                    <li key={`ea-${e.id}`} className="text-emerald-300/90">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onJumpToTarget(view_id, "edge", e.id, "spec")
+                        }
+                        className="truncate text-left hover:underline"
+                      >
+                        + Edge {e.source} → {e.target}
+                        {e.label ? ` (${e.label})` : ""}
+                      </button>
+                    </li>
+                  ))}
+                  {diff.edges_modified.map((e) => {
+                    const edgeLines = summarizeEdgeDiff(diff, e.id);
+                    return (
+                      <li key={`em-${e.id}`} className="text-sky-200/90">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onJumpToTarget(view_id, "edge", e.id, "spec")
+                          }
+                          className="truncate text-left hover:underline"
+                        >
+                          ~ Edge {e.id}: {edgeLines.join(" · ")}
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {diff.edges_removed.length > 0 && (
+                    <li className="text-rose-300/90">
+                      - {diff.edges_removed.length} removed edge
+                      {diff.edges_removed.length > 1 ? "s" : ""}
+                    </li>
+                  )}
+                </ul>
               </div>
-              <ul className="space-y-1 text-xs text-slate-300">
-                {Object.keys(diff.view_meta_changed).length > 0 && (
-                  <li>• View title/direction updated</li>
-                )}
-                {diff.nodes_added.map((n) => (
-                  <li key={n.id} className="text-emerald-300">
-                    + Added node: {n.title}
-                  </li>
-                ))}
-                {diff.nodes_modified.map((n) => (
-                  <li key={n.id} className="text-sky-200">
-                    ~ Modified node: {n.title}
-                  </li>
-                ))}
-                {diff.nodes_removed.map((n) => (
-                  <li key={n.id} className="text-rose-300">
-                    - Removed node: {n.title}
-                  </li>
-                ))}
-                {(diff.edges_added.length > 0 ||
-                  diff.edges_modified.length > 0 ||
-                  diff.edges_removed.length > 0) && (
-                  <li className="text-slate-400">
-                    • Edges: +{diff.edges_added.length} / ~
-                    {diff.edges_modified.length} / -{diff.edges_removed.length}
-                  </li>
-                )}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
 
           {pendingFeedback.pending_threads.length > 0 && (
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-2">
