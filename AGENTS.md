@@ -48,7 +48,11 @@ This document captures architectural invariants, conventions, and verification c
    * Preserve existing runtime properties (`{ ...(existing ?? {}), ... }`) and `selected` flags inside functional `setRfNodes((prev) => ...)` / `setRfEdges((prev) => ...)` updaters.
    * Keep `.react-flow__edgelabel-renderer { z-index: 1100 !important; }` above elevated `.react-flow__edge.selected` (`z-index: 1000`) in `index.css` so edge `.react-flow__edge-interaction` paths do not swallow clicks on `<EdgeLabelRenderer>` bend handles.
    * Keep Light/Dark styling on `--rl-*` CSS variable tokens (`tailwind.config.js` + `index.css`), keep `locked` violet vs `needs_input` amber, keep per-view `HistoryEntry` undo/redo covering both semantic views and edge routes/positions, and run interactive Playwright click/drag/undo/theme checks after UI edits.
-9. **Branch & Release Discipline (Post-`v0.2.1`)**:
+9. **ELK + Corridor Routing, Overflow Tooltips & Expanded Node Layering**:
+   * `computeAutoLayout` uses ELK Layered `ORTHOGONAL` (`NETWORK_SIMPLEX` + `BRANDES_KOEPF` + `TWO_SIDED`) with `resolveNodeOverlaps` and returns `{ positions, autoRoutes }`. `computeSmartEdgeRouting` adopts valid ELK routes, falls back to orthogonal Corridor A* (`routeOnCorridorGrid`) + `spreadOverlappingCorridorSegments`, and keeps end stubs strictly orthogonal.
+   * Node hover/selection edge emphasis runs in a lightweight `useEffect` updating `highlighted`/`softDimmed`/`zIndex` without recomputing geometric routing on cursor hover.
+   * Use `<OverflowTooltip>` (`createPortal`, `z-[9999]`) for truncated node/edge text (without conflicting native `title` tooltips on truncated spans), cap expanded attribute/section lists with `overflow-y-auto nowheel`, and elevate expanded cards (`zIndex: 1200`) above neighboring nodes.
+10. **Branch & Release Discipline (Post-`v0.2.1`)**:
    * After `v0.2.1`, do **NOT** push directly to `main`; create feature/fix branches and open pull requests instead.
 
 ---

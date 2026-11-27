@@ -16,11 +16,14 @@ import type {
   HandleSide,
 } from "@redlinify/shared/browser";
 import type { Point } from "../layout/routing";
+import { OverflowTooltip } from "./OverflowTooltip";
 
 export interface StepEdgeData extends Record<string, unknown> {
   edge: DesignEdge;
   diagramType: DiagramType;
   dimmed?: boolean;
+  highlighted?: boolean;
+  softDimmed?: boolean;
   sourcePortOffset?: number;
   targetPortOffset?: number;
   manualWaypoints?: Point[];
@@ -41,6 +44,29 @@ function shiftPort(pt: Point, position: Position, offset: number): Point {
     return { x: pt.x, y: pt.y + offset };
   }
   return { x: pt.x + offset, y: pt.y };
+}
+
+function longestSegmentMidpoint(pts: Point[]): Point | null {
+  if (pts.length < 2) return null;
+  // Prefer interior segments if there are at least 4 points (2+ waypoints)
+  const startIdx = pts.length >= 4 ? 1 : 0;
+  const endIdx = pts.length >= 4 ? pts.length - 2 : pts.length - 1;
+  let bestScore = -1;
+  let bestMid: Point | null = null;
+  for (let i = startIdx; i < endIdx; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const dx = Math.abs(b.x - a.x);
+    const dy = Math.abs(b.y - a.y);
+    const len = Math.hypot(dx, dy);
+    const horizBoost = dx >= dy ? 1.25 : 1;
+    const score = len * horizBoost;
+    if (score > bestScore) {
+      bestScore = score;
+      bestMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+  }
+  return bestMid;
 }
 
 function buildRoundedPolylinePath(points: Point[], radius = 12): string {
@@ -323,9 +349,10 @@ export function StepEdge({
       const midIdx = Math.floor(activeManual.length / 2);
       const a = activeManual[midIdx - 1]!;
       const b = activeManual[midIdx]!;
-      labelX = (a.x + b.x) / 2;
-      labelY = (a.y + b.y) / 2;
-      bendKnob = { x: labelX, y: labelY };
+      bendKnob = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const best = longestSegmentMidpoint(pts) ?? bendKnob;
+      labelX = best.x;
+      labelY = best.y;
     } else {
       const wp = activeManual[0]!;
       labelX = wp.x;
@@ -340,10 +367,16 @@ export function StepEdge({
     sourceOutward = normalizeVec(first.x - sx, first.y - sy, defaultSourceOutward);
     targetOutward = normalizeVec(last.x - tx, last.y - ty, defaultTargetOutward);
     if (autoWaypoints.length >= 2) {
-      const a = autoWaypoints[0]!;
-      const b = autoWaypoints[1]!;
-      labelX = (a.x + b.x) / 2;
-      labelY = (a.y + b.y) / 2;
+      const best = longestSegmentMidpoint(pts);
+      if (best) {
+        labelX = best.x;
+        labelY = best.y;
+      } else {
+        const a = autoWaypoints[0]!;
+        const b = autoWaypoints[1]!;
+        labelX = (a.x + b.x) / 2;
+        labelY = (a.y + b.y) / 2;
+      }
     } else {
       labelX = autoWaypoints[0]!.x;
       labelY = autoWaypoints[0]!.y;
@@ -431,12 +464,13 @@ export function StepEdge({
     window.addEventListener("pointercancel", onUp);
   };
 
-  const strokeColor = selected
+  const isFocused = Boolean(selected || data?.highlighted);
+  const strokeColor = isFocused
     ? "var(--rl-edge-selected, #38bdf8)"
     : designEdge?.locked
       ? "var(--rl-edge-locked, #f59e0b)"
       : "var(--rl-edge-default, #64748b)";
-  const strokeWidth = selected ? 2.5 : 1.75;
+  const strokeWidth = selected ? 2.5 : data?.highlighted ? 2.3 : 1.75;
   const markerId = `redlinify-arrow-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
   const srcCard = designEdge?.source_cardinality;
@@ -462,7 +496,11 @@ export function StepEdge({
     designEdge?.step !== undefined ||
     Boolean(designEdge?.locked);
 
-  const opacity = data?.dimmed ? 0.2 : 1;
+  const opacity = data?.dimmed
+    ? 0.2
+    : data?.softDimmed && !isFocused
+      ? 0.35
+      : 1;
   const renderedLabelY =
     selected && activeManual.length === 1 ? labelY - 22 : labelY;
 
@@ -518,6 +556,19 @@ export function StepEdge({
         stroke="transparent"
         strokeWidth={20}
         className="react-flow__edge-interaction"
+      />
+
+      <path
+        d={edgePath}
+        fill="none"
+        pointerEvents="none"
+        style={{
+          stroke: "var(--rl-canvas-bg, #020617)",
+          strokeWidth: strokeWidth + 4,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+          opacity: data?.dimmed || (data?.softDimmed && !isFocused) ? 0 : 0.92,
+        }}
       />
 
       {useSplitDash ? (
@@ -601,13 +652,19 @@ export function StepEdge({
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px,${renderedLabelY}px)`,
               pointerEvents: "all",
-              zIndex: selected ? 40 : 10,
+              zIndex: selected ? 40 : data?.highlighted ? 25 : 10,
             }}
             className={`nodrag nopan inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] shadow-md transition-opacity ${
-              selected
+              isFocused
                 ? "border-sky-400 bg-slate-900 text-sky-100"
                 : "border-slate-700 bg-slate-900/95 text-slate-200"
-            } ${data?.dimmed ? "opacity-20" : "opacity-100"}`}
+            } ${
+              data?.dimmed
+                ? "opacity-20"
+                : data?.softDimmed && !isFocused
+                  ? "opacity-40"
+                  : "opacity-100"
+            }`}
           >
             {designEdge?.step !== undefined && (
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-[10px] font-bold text-slate-950">
@@ -615,7 +672,12 @@ export function StepEdge({
               </span>
             )}
             {labelText && (
-              <span className="max-w-[160px] truncate">{labelText}</span>
+              <OverflowTooltip
+                text={labelText}
+                className="inline-flex min-w-0 max-w-[160px]"
+              >
+                <span className="max-w-[160px] truncate">{labelText}</span>
+              </OverflowTooltip>
             )}
             {designEdge?.locked && (
               <Lock className="h-2.5 w-2.5 text-violet-400" />

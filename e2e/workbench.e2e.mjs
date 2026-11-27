@@ -771,8 +771,190 @@ async function main() {
     assert.equal(await collapseNode.getByText("step_7").count(), 0);
     console.log("PASS 6: Direction toggle fitView centering and non-redundant collapse UX verified.");
 
+    // 10. Dense auto-layout overlap check, overflow tooltips, and elevated scrollable 30-attribute ER card
+    const erDetailResp = await fetch(`${baseUrl}/api/views/fleet_er`);
+    assert.equal(erDetailResp.status, 200);
+    const erDetail = await erDetailResp.json();
+    const thirtyFields = [
+      {
+        id: "f_long",
+        name: "col_01_very_long_audit_correlation_identifier_name_with_extra_suffix_to_force_truncation",
+        type: "varchar",
+        pk: true,
+        nullable: false,
+        note: "Correlation token across microservices",
+      },
+      { id: "f_ok", name: "col_02_ok", type: "int", nullable: false },
+      ...Array.from({ length: 28 }, (_, idx) => ({
+        id: `f_col_${idx + 3}`,
+        name: `col_${String(idx + 3).padStart(2, "0")}`,
+        type: "text",
+        nullable: true,
+      })),
+    ];
+    const nextFleetEr = {
+      ...erDetail.view,
+      nodes: [
+        ...erDetail.view.nodes.map((n) =>
+          n.id === "vehicles" ? { ...n, fields: thirtyFields } : n,
+        ),
+        {
+          id: "audit_log",
+          kind: "Entity",
+          title: "Audit Log",
+          status: "draft",
+          locked: false,
+          sections: [],
+          fields: [
+            { id: "a_id", name: "id", type: "uuid", pk: true, nullable: false },
+          ],
+          created_by: "human",
+        },
+      ],
+      edges: [
+        ...erDetail.view.edges,
+        {
+          id: "e_veh_audit",
+          source: "vehicles",
+          target: "audit_log",
+          label: "records",
+          relation_kind: "association",
+          source_cardinality: "1",
+          target_cardinality: "0..*",
+          style: "solid",
+          locked: false,
+          created_by: "human",
+        },
+      ],
+    };
+    const putErResp = await fetch(`${baseUrl}/api/views/fleet_er`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        view: nextFleetEr,
+        base_hash: erDetail.view_hash,
+      }),
+    });
+    assert.equal(putErResp.status, 200);
+
+    await clickEmptyPane(page);
+    await page.keyboard.press("Tab");
+    await page.waitForSelector('.react-flow__node[data-id="audit_log"]', {
+      timeout: 5000,
+    });
+    await canvasDock.getByRole("button", { name: "Auto-Layout" }).click();
+    await page.waitForTimeout(450);
+
+    const overlapPairs = await page.evaluate(() => {
+      const els = [...document.querySelectorAll(".react-flow__node")];
+      const boxes = els.map((el) => ({
+        id: el.getAttribute("data-id"),
+        rect: el.getBoundingClientRect(),
+      }));
+      const overlaps = [];
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i].rect;
+          const b = boxes[j].rect;
+          const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (ox > 0 && oy > 0) {
+            overlaps.push([boxes[i].id, boxes[j].id]);
+          }
+        }
+      }
+      return overlaps;
+    });
+    assert.deepEqual(overlapPairs, [], `Expected zero overlapping nodes, got ${JSON.stringify(overlapPairs)}`);
+
+    await page.locator(".react-flow__controls-fitview").first().click();
+    await page.waitForTimeout(250);
+
+    const longCol = vehiclesNode
+      .locator("span.font-mono.text-slate-100", {
+        hasText:
+          "col_01_very_long_audit_correlation_identifier_name_with_extra_suffix_to_force_truncation",
+      })
+      .first();
+    await longCol.hover();
+    const tooltipLoc = page.locator('[role="tooltip"]').first();
+    await tooltipLoc.waitFor({ state: "visible", timeout: 3000 });
+    const tooltipBody = await tooltipLoc.textContent();
+    assert.ok(
+      tooltipBody?.includes(
+        "col_01_very_long_audit_correlation_identifier_name_with_extra_suffix_to_force_truncation",
+      ),
+      `Unexpected tooltip text: ${tooltipBody}`,
+    );
+    assert.ok(
+      tooltipBody?.includes("Correlation token across microservices"),
+      `Expected field note in tooltip, got: ${tooltipBody}`,
+    );
+
+    const shortCol = vehiclesNode
+      .locator("span.font-mono.text-slate-100", { hasText: "col_02_ok" })
+      .first();
+    await shortCol.hover();
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('[role="tooltip"]').count(), 0);
+
+    await vehiclesNode.getByRole("button", { name: "+22 more" }).click();
+    await vehiclesNode
+      .locator('[data-expanded="true"]')
+      .waitFor({ state: "visible", timeout: 4000 });
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('.react-flow__node[data-id="vehicles"]');
+        return el && Number.parseInt(getComputedStyle(el).zIndex || "0", 10) >= 1200;
+      },
+      null,
+      { timeout: 4000 },
+    );
+
+    const expandedMetrics = await page.evaluate(() => {
+      const vehNodeEl = document.querySelector('.react-flow__node[data-id="vehicles"]');
+      const auditNodeEl = document.querySelector('.react-flow__node[data-id="audit_log"]');
+      const listEl = vehNodeEl?.querySelector("ul");
+      const parseZ = (el) => {
+        const z = Number.parseInt(getComputedStyle(el).zIndex || "0", 10);
+        return Number.isFinite(z) ? z : 0;
+      };
+      return {
+        vehZ: parseZ(vehNodeEl),
+        auditZ: parseZ(auditNodeEl),
+        scrollHeight: listEl?.scrollHeight ?? 0,
+        clientHeight: listEl?.clientHeight ?? 0,
+      };
+    });
+    assert.ok(
+      expandedMetrics.vehZ >= 1200 && expandedMetrics.vehZ > expandedMetrics.auditZ,
+      `Expected expanded node zIndex >= 1200 and > neighbor (${JSON.stringify(expandedMetrics)})`,
+    );
+    assert.ok(
+      expandedMetrics.clientHeight > 0 &&
+        expandedMetrics.clientHeight <= 400 &&
+        expandedMetrics.scrollHeight > expandedMetrics.clientHeight,
+      `Expected capped scrollable ER attributes list (${JSON.stringify(expandedMetrics)})`,
+    );
+
+    const showLessBtn = vehiclesNode.getByRole("button", { name: "Show less" });
+    assert.equal(await showLessBtn.isVisible(), true);
+    await showLessBtn.click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await vehiclesNode.locator('[data-expanded="true"]').count(),
+      0,
+    );
+    const collapsedZ = await page.evaluate(() => {
+      const vehNodeEl = document.querySelector('.react-flow__node[data-id="vehicles"]');
+      const z = Number.parseInt(getComputedStyle(vehNodeEl).zIndex || "0", 10);
+      return Number.isFinite(z) ? z : 0;
+    });
+    assert.ok(collapsedZ < 1200, `Expected collapsed zIndex < 1200, got ${collapsedZ}`);
+    console.log("PASS 7: Auto-layout spacing, overflow tooltips, and elevated 30-attribute ER card verified.");
+
     assert.deepEqual(errors, [], `Browser errors: ${errors.join("; ")}`);
-    console.log("PASS 7: Zero console/page errors.");
+    console.log("PASS 8: Zero console/page errors.");
   } catch (err) {
     console.error("E2E FAILED. UI server logs:\n", serverLogs);
     throw err;

@@ -167,6 +167,10 @@ body,
   font-size: 10px !important;
 }
 
+.react-flow__node:has([data-expanded="true"]) {
+  z-index: 1200 !important;
+}
+
 .react-flow__edge.selected {
   z-index: 1000 !important;
 }

@@ -16,7 +16,7 @@ import {
   saveView,
   type WorkspaceSnapshot,
 } from "../api/client";
-import { computeAutoLayout } from "../layout/elk";
+import { computeAutoLayout, type ElkAutoEdgeRoute } from "../layout/elk";
 import type { Point } from "../layout/routing";
 import type { HistoryEntry } from "./useViewHistory";
 
@@ -33,6 +33,8 @@ interface UseWorkspaceSyncOptions {
   activeViewRef: RefBox<DesignView | null>;
   positionsRef: RefBox<Record<string, Point>>;
   edgeRoutesRef: RefBox<Record<string, EdgeRoute>>;
+  measuredSizesRef?: RefBox<Record<string, { width?: number; height?: number }>>;
+  elkRoutesRef?: RefBox<Record<string, ElkAutoEdgeRoute>>;
   viewportReadyRef: RefBox<boolean>;
   getViewport: () => Viewport;
   pushHistoryEntry: (viewId: string, customEntry?: HistoryEntry) => void;
@@ -44,6 +46,8 @@ export function useWorkspaceSync({
   activeViewRef,
   positionsRef,
   edgeRoutesRef,
+  measuredSizesRef,
+  elkRoutesRef,
   viewportReadyRef,
   getViewport,
   pushHistoryEntry,
@@ -100,15 +104,38 @@ export function useWorkspaceSync({
       viewId: string,
       options?: { preserveViewport?: boolean; forceResetLayout?: boolean },
     ): Promise<DesignView> => {
+      const switchingView =
+        activeViewIdRef.current !== null && activeViewIdRef.current !== viewId;
+      if (switchingView && measuredSizesRef) {
+        measuredSizesRef.current = {};
+      }
+      if (switchingView && elkRoutesRef) {
+        elkRoutesRef.current = {};
+      }
+
       const detail = await fetchView(viewId);
       const savedPositions = options?.forceResetLayout
         ? {}
         : detail.layout.positions;
-      const mergedPositions = await computeAutoLayout(
-        detail.view,
-        { positions: savedPositions },
-        { forceReset: options?.forceResetLayout },
-      );
+      const { positions: mergedPositions, autoRoutes } =
+        await computeAutoLayout(
+          detail.view,
+          { positions: savedPositions },
+          {
+            forceReset: options?.forceResetLayout,
+            measured: switchingView ? undefined : measuredSizesRef?.current,
+          },
+        );
+
+      if (elkRoutesRef) {
+        if (
+          options?.forceResetLayout ||
+          switchingView ||
+          Object.keys(autoRoutes).length > 0
+        ) {
+          elkRoutesRef.current = autoRoutes;
+        }
+      }
 
       const targetLayoutVersion = layoutVersionRef.current + 1;
       layoutVersionRef.current = targetLayoutVersion;
@@ -141,7 +168,15 @@ export function useWorkspaceSync({
       setRoutingTick((t) => t + 1);
       return detail.view;
     },
-    [activeViewRef, edgeRoutesRef, positionsRef, viewportReadyRef],
+    [
+      activeViewIdRef,
+      activeViewRef,
+      edgeRoutesRef,
+      elkRoutesRef,
+      measuredSizesRef,
+      positionsRef,
+      viewportReadyRef,
+    ],
   );
 
   // Initial load
@@ -277,6 +312,9 @@ export function useWorkspaceSync({
     async (target: HistoryEntry, curr: DesignView) => {
       positionsRef.current = structuredClone(target.positions);
       edgeRoutesRef.current = structuredClone(target.edgeRoutes);
+      if (elkRoutesRef) {
+        elkRoutesRef.current = {};
+      }
       setLayoutVersion((v) => v + 1);
       setRoutingTick((t) => t + 1);
       await persistCurrentLayout(curr.id);
@@ -284,7 +322,7 @@ export function useWorkspaceSync({
         await persistView(target.view, { recordHistory: false });
       }
     },
-    [edgeRoutesRef, persistCurrentLayout, persistView, positionsRef],
+    [edgeRoutesRef, elkRoutesRef, persistCurrentLayout, persistView, positionsRef],
   );
 
   return {
