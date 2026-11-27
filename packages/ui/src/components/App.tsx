@@ -996,10 +996,18 @@ function WorkbenchInner() {
     [theme],
   );
 
+  const projectTitle = snapshot?.status.project_name;
+  useEffect(() => {
+    document.title = projectTitle
+      ? `${projectTitle} — Redlinify`
+      : "Redlinify";
+  }, [projectTitle]);
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
       <TabBar
         projectName={snapshot?.status.project_name ?? "Redlinify"}
+        projectRootDir={snapshot?.root_dir}
         tabs={tabs}
         viewRequests={viewRequests}
         activeViewId={activeViewId}

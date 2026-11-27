@@ -52,7 +52,11 @@ This document captures architectural invariants, conventions, and verification c
    * `computeAutoLayout` uses ELK Layered `ORTHOGONAL` (`NETWORK_SIMPLEX` + `BRANDES_KOEPF` + `TWO_SIDED`) with `resolveNodeOverlaps` and returns `{ positions, autoRoutes }`. `computeSmartEdgeRouting` adopts valid ELK routes, falls back to orthogonal Corridor A* (`routeOnCorridorGrid`) + `spreadOverlappingCorridorSegments`, and keeps end stubs strictly orthogonal.
    * Node hover/selection edge emphasis runs in a lightweight `useEffect` updating `highlighted`/`softDimmed`/`zIndex` without recomputing geometric routing on cursor hover.
    * Use `<OverflowTooltip>` (`createPortal`, `z-[9999]`) for truncated node/edge text (without conflicting native `title` tooltips on truncated spans), cap expanded attribute/section lists with `overflow-y-auto nowheel`, and elevate expanded cards (`zIndex: 1200`) above neighboring nodes.
-10. **Branch & Release Discipline (Post-`v0.2.1`)**:
+10. **Multi-Project Root & Port Isolation**:
+   * `findProjectRoot()` walks upward and stops at the first directory containing `.design/` **or** `.git/`, never climbing past a `.git/` repository boundary into a parent directory's `.design/`.
+   * `redlinify mcp` syncs the workspace root via MCP `roots/list` & `notifications/roots/list_changed` when `--dir` is not explicitly set, and write tools refuse to auto-initialize `.design/` inside un-initialized `$HOME` or filesystem root directories.
+   * `uiDaemon.ts` canonicalizes root paths (`realpathSync` + OS case normalization) and delegates port selection atomically via `--auto-port` on kernel `listen()` rather than pre-binding sockets, while `GET /api/workspace` exposes `root_dir` so browser tabs update `document.title` and detect server project switches cleanly.
+11. **Branch & Release Discipline (Post-`v0.2.1`)**:
    * After `v0.2.1`, do **NOT** push directly to `main`; create feature/fix branches and open pull requests instead.
 
 ---

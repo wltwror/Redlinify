@@ -517,4 +517,23 @@ describe("DesignStorage", () => {
 
     await expect(storage.deleteView("v1")).rejects.toThrow(NotFoundError);
   });
+
+  it("stops findProjectRoot at .git boundary instead of climbing into a parent .design/", async () => {
+    const parentDir = await makeTempDir("redlinify-parent-");
+    const parentStorage = new DesignStorage(parentDir);
+    await parentStorage.initWorkspace("ParentRepo");
+
+    const childRepo = path.join(parentDir, "nested-repo");
+    const childSubdir = path.join(childRepo, "packages", "app", "src");
+    await fs.mkdir(path.join(childRepo, ".git"), { recursive: true });
+    await fs.mkdir(childSubdir, { recursive: true });
+
+    expect(await findProjectRoot(childSubdir)).toBe(childRepo);
+
+    // Sub-package inside childRepo that explicitly has its own .design/ still wins
+    const pkgRoot = path.join(childRepo, "packages", "app");
+    const pkgStorage = new DesignStorage(pkgRoot);
+    await pkgStorage.initWorkspace("SubPkg");
+    expect(await findProjectRoot(childSubdir)).toBe(pkgRoot);
+  });
 });
