@@ -902,6 +902,14 @@ async function main() {
     await vehiclesNode
       .locator('[data-expanded="true"]')
       .waitFor({ state: "visible", timeout: 4000 });
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('.react-flow__node[data-id="vehicles"]');
+        return el && Number.parseInt(getComputedStyle(el).zIndex || "0", 10) >= 1200;
+      },
+      null,
+      { timeout: 4000 },
+    );
 
     const expandedMetrics = await page.evaluate(() => {
       const vehNodeEl = document.querySelector('.react-flow__node[data-id="vehicles"]');

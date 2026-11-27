@@ -121,9 +121,6 @@ function WorkbenchInner() {
   const [pulsingNodeId, setPulsingNodeId] = useState<string | null>(null);
   const [pendingConn, setPendingConn] = useState<Connection | null>(null);
   const [appliedLayoutVersion, setAppliedLayoutVersion] = useState(0);
-  const [expandedNodeIds, setExpandedNodeIds] = useState<
-    Record<string, boolean>
-  >({});
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
@@ -134,7 +131,6 @@ function WorkbenchInner() {
   >({});
   const elkRoutesRef = useRef<Record<string, ElkAutoEdgeRoute>>({});
   const expandedNodeIdsRef = useRef<Record<string, boolean>>({});
-  expandedNodeIdsRef.current = expandedNodeIds;
   const focusNodeIdRef = useRef<string | null>(null);
   focusNodeIdRef.current = hoveredNodeId ?? selectedNodeId;
   const viewportReadyRef = useRef(false);
@@ -382,20 +378,34 @@ function WorkbenchInner() {
 
   const handleExpandedChange = useCallback(
     (nodeId: string, expanded: boolean) => {
-      setExpandedNodeIds((prev) => {
-        if (Boolean(prev[nodeId]) === expanded) return prev;
-        if (!expanded) {
-          const { [nodeId]: _, ...rest } = prev;
-          return rest;
-        }
-        return { ...prev, [nodeId]: true };
+      const curr = Boolean(expandedNodeIdsRef.current[nodeId]);
+      if (curr === expanded) return;
+      if (expanded) {
+        expandedNodeIdsRef.current = {
+          ...expandedNodeIdsRef.current,
+          [nodeId]: true,
+        };
+      } else {
+        const nextMap = { ...expandedNodeIdsRef.current };
+        delete nextMap[nodeId];
+        expandedNodeIdsRef.current = nextMap;
+      }
+      setRfNodes((prev) => {
+        let changed = false;
+        const targetZ = expanded ? 1200 : undefined;
+        const next = prev.map((n) => {
+          if (n.id !== nodeId || n.zIndex === targetZ) return n;
+          changed = true;
+          return { ...n, zIndex: targetZ };
+        });
+        return changed ? next : prev;
       });
     },
-    [],
+    [setRfNodes],
   );
 
   useEffect(() => {
-    setExpandedNodeIds({});
+    expandedNodeIdsRef.current = {};
     setHoveredNodeId(null);
   }, [activeView?.id]);
 
@@ -715,20 +725,6 @@ function WorkbenchInner() {
     pulsingNodeId,
     setRfNodes,
   ]);
-
-  // Keep expanded ER cards & sections stacked cleanly above neighboring boxes
-  useEffect(() => {
-    setRfNodes((prev) => {
-      let changed = false;
-      const next = prev.map((n) => {
-        const targetZ = expandedNodeIds[n.id] ? 1200 : undefined;
-        if (n.zIndex === targetZ) return n;
-        changed = true;
-        return { ...n, zIndex: targetZ };
-      });
-      return changed ? next : prev;
-    });
-  }, [expandedNodeIds, setRfNodes]);
 
   // Execute pending viewport fit/restore strictly after StoreUpdater commits updated rfNodes
   useEffect(() => {

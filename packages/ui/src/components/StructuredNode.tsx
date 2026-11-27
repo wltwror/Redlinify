@@ -138,11 +138,10 @@ function StructuredNodeComponent({
     fieldsExpanded || Object.values(expandedSections).some(Boolean);
 
   useEffect(() => {
-    onExpandedChange?.(node.id, isAnyExpanded);
     return () => {
       onExpandedChange?.(node.id, false);
     };
-  }, [isAnyExpanded, node.id, onExpandedChange]);
+  }, [node.id, onExpandedChange]);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(node.title);
   const [editingItem, setEditingItem] = useState<{
@@ -663,7 +662,11 @@ function StructuredNodeComponent({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setFieldsExpanded((v) => !v);
+                const nextFields = !fieldsExpanded;
+                setFieldsExpanded(nextFields);
+                const nextAny =
+                  nextFields || Object.values(expandedSections).some(Boolean);
+                onExpandedChange?.(node.id, nextAny);
               }}
               className="nodrag mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-sky-400 hover:bg-slate-800"
             >
@@ -849,10 +852,15 @@ function StructuredNodeComponent({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setExpandedSections((prev) => ({
-                        ...prev,
-                        [section.id]: !isExpanded,
-                      }));
+                      const nextSec = !isExpanded;
+                      const nextMap = {
+                        ...expandedSections,
+                        [section.id]: nextSec,
+                      };
+                      setExpandedSections(nextMap);
+                      const nextAny =
+                        fieldsExpanded || Object.values(nextMap).some(Boolean);
+                      onExpandedChange?.(node.id, nextAny);
                     }}
                     className="nodrag mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-sky-400 hover:bg-slate-800"
                   >
