@@ -262,11 +262,12 @@ export function TabBar({
             aria-label="Diagram tabs"
             className="redlinify-tab-strip flex min-w-0 items-center gap-1 overflow-x-auto"
           >
-            {tabs.map((tab) => {
+            {tabs.map((tab, idx) => {
               const active = tab.view_id === activeViewId;
               const hasBlueDot = tab.has_human_edits || tab.waiting_on_agent > 0;
               const hasRedDot = tab.drifted_count > 0;
               const isEr = tab.diagram_type === "er";
+              const keyHint = idx < 9 ? ` · Press ${idx + 1}` : "";
 
               return (
                 <div
@@ -289,7 +290,7 @@ export function TabBar({
                   <button
                     type="button"
                     onClick={() => onSelectView(tab.view_id)}
-                    title={`${tab.description ?? tab.title} (Right-click for options)`}
+                    title={`${tab.description ?? tab.title}${keyHint} (Right-click for options)`}
                     className="flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-xs font-medium"
                   >
                     {isEr && (

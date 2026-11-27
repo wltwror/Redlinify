@@ -89,7 +89,7 @@ export function CanvasDock({
           type="button"
           onClick={() => onAddBox()}
           aria-label={addLabel}
-          title={`${addLabel} (or right-click canvas)`}
+          title={`${addLabel} (N or right-click canvas)`}
           className="flex h-7 w-7 items-center justify-center rounded-lg text-sky-400 hover:bg-slate-800 hover:text-sky-300 transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -104,7 +104,7 @@ export function CanvasDock({
                 onAddBox("card");
               }}
               aria-label={addLabel}
-              title="Add Box (or right-click canvas)"
+              title="Add Box (N or right-click canvas)"
               className="flex h-7 w-7 items-center justify-center text-sky-400 hover:bg-slate-800 hover:text-sky-300 transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -188,7 +188,7 @@ export function CanvasDock({
       <button
         type="button"
         onClick={onAutoLayout}
-        title="Reset manual positions & routes and run ELK auto-layout"
+        title="Reset manual positions & routes and run ELK auto-layout (R)"
         aria-label="Auto-Layout"
         className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
       >

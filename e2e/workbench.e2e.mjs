@@ -436,7 +436,7 @@ async function main() {
 
     await clickEmptyPane(page);
     await page.waitForTimeout(80);
-    await page.keyboard.press("1");
+    await page.keyboard.press("Shift+0");
     await page.waitForTimeout(240);
     const k0 = await getViewport(page);
     assert.ok(Math.abs(k0.zoom - 1.0) < 0.05);
@@ -959,8 +959,169 @@ async function main() {
     assert.ok(collapsedZ < 1200, `Expected collapsed zIndex < 1200, got ${collapsedZ}`);
     console.log("PASS 7: Auto-layout spacing, overflow tooltips, and elevated 30-attribute ER card verified.");
 
+    // 11. QoL shortcuts (1-9, n at cursor, r auto-layout, Space fit view), drawer/filter toggle cooldown, My Edits diff cards & right-click revert
+    await clickEmptyPane(page);
+    await page.waitForTimeout(80);
+    await page.keyboard.press("1");
+    await page.waitForSelector('.react-flow__node[data-id="design_storage"]', {
+      timeout: 5000,
+    });
+    assert.ok(page.url().includes("#view=architecture"));
+
+    const archPath = path.join(tmpRepo, ".design", "views", "architecture.json");
+    const archBeforeN = JSON.parse(await fs.readFile(archPath, "utf8"));
+    const existingNIds = new Set(archBeforeN.nodes.map((n) => n.id));
+    const nCursorPt = await findEmptyPanePoint(page);
+    await page.mouse.move(nCursorPt.x, nCursorPt.y);
+    await page.waitForTimeout(50);
+    await page.keyboard.press("n");
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll(".react-flow__node").length === expected,
+      archBeforeN.nodes.length + 1,
+      { timeout: 5000 },
+    );
+    const archAfterN = JSON.parse(await fs.readFile(archPath, "utf8"));
+    const addedByShortcut = archAfterN.nodes.find((n) => !existingNIds.has(n.id));
+    assert.ok(addedByShortcut, "Expected 'n' shortcut to create a new node");
+
+    await clickEmptyPane(page);
+    await page.keyboard.press("r");
+    await page.waitForTimeout(450);
+    await assertAllNodesInViewport(page, "After 'r' auto-layout");
+
+    await page.keyboard.press("=");
+    await page.keyboard.press("=");
+    await page.waitForTimeout(200);
+    const zoomedVp = await getViewport(page);
+    await clickEmptyPane(page);
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(350);
+    const spaceFitVp = await getViewport(page);
+    assert.notEqual(spaceFitVp.zoom, zoomedVp.zoom);
+    await assertAllNodesInViewport(page, "After Space tap fit view");
+
+    const questionsBtn = page
+      .locator("button")
+      .filter({ hasText: /^Questions/ })
+      .first();
+    await questionsBtn.click();
+    await page.getByRole("button", { name: "Close inspector" }).waitFor({
+      state: "visible",
+      timeout: 3000,
+    });
+    assert.equal(await questionsBtn.getAttribute("aria-pressed"), "true");
+    await page.waitForTimeout(80);
+    await questionsBtn.click();
+    await page.waitForTimeout(100);
+    assert.equal(
+      await page.getByRole("button", { name: "Close inspector" }).isVisible(),
+      true,
+      "Expected cooldown to protect Questions drawer from accidental double-click close",
+    );
+    await page.waitForTimeout(380);
+    await questionsBtn.click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.getByRole("button", { name: "Close inspector" }).count(),
+      0,
+      "Expected second Questions click after cooldown to close drawer",
+    );
+    assert.equal(await questionsBtn.getAttribute("aria-pressed"), "false");
+
+    const myEditsBtn = page
+      .getByRole("button", { name: /^My Edits$/ })
+      .first();
+    await myEditsBtn.click();
+    await page.locator('[data-testid="my-edits-banner"]').waitFor({
+      state: "visible",
+      timeout: 3000,
+    });
+    await page.waitForTimeout(80);
+    await myEditsBtn.click();
+    await page.waitForTimeout(100);
+    assert.equal(
+      await page.locator('[data-testid="my-edits-banner"]').isVisible(),
+      true,
+      "Expected cooldown to protect My Edits filter from accidental double-click toggle",
+    );
+
+    const addedLoc = page.locator(
+      `.react-flow__node[data-id="${addedByShortcut.id}"]`,
+    );
+    await addedLoc.locator('[data-testid="node-edit-summary"]').waitFor({
+      state: "visible",
+      timeout: 4000,
+    });
+    const addedDiffText = await addedLoc
+      .locator('[data-testid="node-edit-summary"]')
+      .textContent();
+    assert.ok(
+      addedDiffText?.includes("+ Added box"),
+      `Expected added node summary card, got: ${addedDiffText}`,
+    );
+    await addedLoc.click({ button: "right" });
+    await page.waitForTimeout(120);
+    await page
+      .getByRole("button", { name: "Discard Added Box", exact: true })
+      .click();
+    await page.waitForFunction(
+      (expected) => document.querySelectorAll(".react-flow__node").length === expected,
+      archBeforeN.nodes.length,
+      { timeout: 5000 },
+    );
+
+    await clickEmptyPane(page);
+    await page.keyboard.press("Space");
+    await page.waitForTimeout(250);
+
+    const dsNodeQol = page.locator('.react-flow__node[data-id="design_storage"]');
+    const origTitle = (
+      await dsNodeQol
+        .locator('[title="Double-click to edit title"]')
+        .first()
+        .textContent()
+    )?.trim();
+    assert.ok(origTitle, "Expected baseline title on design_storage");
+    await dsNodeQol
+      .locator('[title="Double-click to edit title"]')
+      .first()
+      .dblclick();
+    const titleInput = dsNodeQol.locator("input").first();
+    await titleInput.waitFor({ state: "visible", timeout: 3000 });
+    await titleInput.fill("DesignStorage Updated");
+    await titleInput.press("Enter");
+    await dsNodeQol.locator('[data-testid="node-edit-summary"]').waitFor({
+      state: "visible",
+      timeout: 5000,
+    });
+    const diffSummaryText = await dsNodeQol
+      .locator('[data-testid="node-edit-summary"]')
+      .textContent();
+    assert.ok(
+      diffSummaryText?.includes("DesignStorage Updated"),
+      `Expected inline edit diff summary, got: ${diffSummaryText}`,
+    );
+
+    await dsNodeQol.click({ button: "right" });
+    await page.waitForTimeout(120);
+    await page
+      .getByRole("button", { name: "Revert Box to Unmodified", exact: true })
+      .click();
+    await page.waitForFunction(
+      ({ expectedTitle }) => {
+        const el = document.querySelector(
+          '.react-flow__node[data-id="design_storage"]',
+        );
+        const summary = el?.querySelector('[data-testid="node-edit-summary"]');
+        return el && !summary && el.textContent?.includes(expectedTitle);
+      },
+      { expectedTitle: origTitle },
+      { timeout: 5000 },
+    );
+    console.log("PASS 8: Shortcuts (1, n, r, Space, Shift+0), drawer cooldown, My Edits diff cards, and right-click revert verified.");
+
     assert.deepEqual(errors, [], `Browser errors: ${errors.join("; ")}`);
-    console.log("PASS 8: Zero console/page errors.");
+    console.log("PASS 9: Zero console/page errors.");
   } catch (err) {
     console.error("E2E FAILED. UI server logs:\n", serverLogs);
     throw err;

@@ -24,6 +24,9 @@ export interface StepEdgeData extends Record<string, unknown> {
   dimmed?: boolean;
   highlighted?: boolean;
   softDimmed?: boolean;
+  isHumanEdited?: boolean;
+  showEditedBadge?: boolean;
+  editSummary?: string[];
   sourcePortOffset?: number;
   targetPortOffset?: number;
   manualWaypoints?: Point[];
@@ -491,10 +494,14 @@ export function StepEdge({
 
   const labelText =
     designEdge?.label?.trim() || (relKind === "subtype" ? "is-a" : "");
+  const showEdgeEditedPill = Boolean(
+    data?.isHumanEdited && data?.showEditedBadge,
+  );
   const hasLabel =
     Boolean(labelText) ||
     designEdge?.step !== undefined ||
-    Boolean(designEdge?.locked);
+    Boolean(designEdge?.locked) ||
+    showEdgeEditedPill;
 
   const opacity = data?.dimmed
     ? 0.2
@@ -657,7 +664,9 @@ export function StepEdge({
             className={`nodrag nopan inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] shadow-md transition-opacity ${
               isFocused
                 ? "border-sky-400 bg-slate-900 text-sky-100"
-                : "border-slate-700 bg-slate-900/95 text-slate-200"
+                : showEdgeEditedPill
+                  ? "border-sky-500/70 bg-slate-900/95 text-sky-100"
+                  : "border-slate-700 bg-slate-900/95 text-slate-200"
             } ${
               data?.dimmed
                 ? "opacity-20"
@@ -674,6 +683,11 @@ export function StepEdge({
             {labelText && (
               <OverflowTooltip
                 text={labelText}
+                detail={
+                  data?.editSummary && data.editSummary.length > 0
+                    ? data.editSummary.join("\n")
+                    : undefined
+                }
                 className="inline-flex min-w-0 max-w-[160px]"
               >
                 <span className="max-w-[160px] truncate">{labelText}</span>
@@ -681,6 +695,25 @@ export function StepEdge({
             )}
             {designEdge?.locked && (
               <Lock className="h-2.5 w-2.5 text-violet-400" />
+            )}
+            {showEdgeEditedPill && (
+              <OverflowTooltip
+                text="Modified edge (right-click to undo)"
+                detail={
+                  data?.editSummary && data.editSummary.length > 0
+                    ? data.editSummary.join("\n")
+                    : undefined
+                }
+                alwaysShow
+                className="inline-flex shrink-0"
+              >
+                <span
+                  data-testid="edge-edited-badge"
+                  className="max-w-[150px] truncate rounded-full bg-sky-500/20 px-1.5 py-0.2 text-[9px] font-medium text-sky-300 border border-sky-500/40"
+                >
+                  {data?.editSummary?.[0] ?? "edited"}
+                </span>
+              </OverflowTooltip>
             )}
           </div>
         )}

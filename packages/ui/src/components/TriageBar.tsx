@@ -12,6 +12,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { ExportFormat } from "../utils/exportDiagram";
+import type { WorkspaceDrawerTab } from "./inspector/types";
 
 export type TriageFilter =
   | "all"
@@ -28,6 +29,7 @@ interface TriageBarProps {
   openQuestionsCount: number;
   pendingAgentCount: number;
   decisionsCount: number;
+  activeWorkspaceTab?: WorkspaceDrawerTab | null;
   onOpenQuestions: () => void;
   onOpenPendingReview: () => void;
   onOpenDecisions: () => void;
@@ -50,6 +52,7 @@ export function TriageBar({
   openQuestionsCount,
   pendingAgentCount,
   decisionsCount,
+  activeWorkspaceTab,
   onOpenQuestions,
   onOpenPendingReview,
   onOpenDecisions,
@@ -112,10 +115,13 @@ export function TriageBar({
           <button
             type="button"
             onClick={onOpenQuestions}
+            aria-pressed={activeWorkspaceTab === "questions"}
             className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-              openQuestionsCount > 0
-                ? "bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
-                : "text-slate-300 hover:bg-slate-800"
+              activeWorkspaceTab === "questions"
+                ? "bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/60"
+                : openQuestionsCount > 0
+                  ? "bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                  : "text-slate-300 hover:bg-slate-800"
             }`}
           >
             <Bell className="h-3 w-3 text-amber-400" />
@@ -128,10 +134,13 @@ export function TriageBar({
           <button
             type="button"
             onClick={onOpenPendingReview}
+            aria-pressed={activeWorkspaceTab === "pending"}
             className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-              pendingAgentCount > 0
-                ? "bg-sky-500/15 text-sky-200 hover:bg-sky-500/25"
-                : "text-slate-300 hover:bg-slate-800"
+              activeWorkspaceTab === "pending"
+                ? "bg-sky-500/25 text-sky-100 ring-1 ring-sky-400/60"
+                : pendingAgentCount > 0
+                  ? "bg-sky-500/15 text-sky-200 hover:bg-sky-500/25"
+                  : "text-slate-300 hover:bg-slate-800"
             }`}
           >
             <Sparkles className="h-3 w-3 text-sky-400" />
@@ -145,11 +154,14 @@ export function TriageBar({
           <button
             type="button"
             onClick={onOpenDecisions}
+            aria-pressed={activeWorkspaceTab === "adrs"}
             title="View resolved design decisions (ADRs) & project threads"
             className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
-              decisionsCount > 0
-                ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-                : "text-slate-300 hover:bg-slate-800"
+              activeWorkspaceTab === "adrs"
+                ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/60"
+                : decisionsCount > 0
+                  ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                  : "text-slate-300 hover:bg-slate-800"
             }`}
           >
             <CheckCircle2 className="h-3 w-3 text-emerald-400" />

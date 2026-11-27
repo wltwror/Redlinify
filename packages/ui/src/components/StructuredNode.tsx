@@ -25,11 +25,15 @@ import {
   getEffectiveNodeShape,
 } from "../layout/elk";
 import { OverflowTooltip } from "./OverflowTooltip";
+import type { TriageFilter } from "./TriageBar";
 
 export interface StructuredNodeData extends Record<string, unknown> {
   node: DesignNode;
   diagramType: DiagramType;
   isHumanEdited: boolean;
+  editSummary?: string[];
+  activeFilter?: TriageFilter;
+  latestQuestionPreview?: string;
   waitingOnHumanCount: number;
   totalOpenThreads: number;
   dimmed: boolean;
@@ -115,6 +119,9 @@ function StructuredNodeComponent({
     node,
     diagramType,
     isHumanEdited,
+    editSummary = [],
+    activeFilter = "all",
+    latestQuestionPreview,
     waitingOnHumanCount,
     totalOpenThreads,
     dimmed,
@@ -303,13 +310,80 @@ function StructuredNodeComponent({
     );
 
   const editedBadge = isHumanEdited ? (
-    <span
-      title="Modified by human since last agent checkpoint"
-      className="shrink-0 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 border border-sky-500/30"
+    <OverflowTooltip
+      text="Modified by human since last agent checkpoint"
+      detail={
+        editSummary.length > 0
+          ? `${editSummary.join("\n")}\n(Right-click to undo to unmodified)`
+          : "Right-click to undo to unmodified"
+      }
+      alwaysShow
+      className="inline-flex shrink-0"
     >
-      edited
-    </span>
+      <span className="shrink-0 rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-300 border border-sky-500/30">
+        edited
+      </span>
+    </OverflowTooltip>
   ) : null;
+
+  const renderTriageStrip = (compact: boolean) => {
+    if (activeFilter === "my_edits" && isHumanEdited) {
+      const visibleLines =
+        editSummary.length > 0
+          ? editSummary.slice(0, compact ? 2 : 4)
+          : ["Modified since last agent checkpoint"];
+      const hiddenLineCount = Math.max(0, editSummary.length - visibleLines.length);
+      return (
+        <div
+          data-testid="node-edit-summary"
+          className="mt-1.5 w-full rounded-md border border-sky-500/35 bg-sky-500/10 px-2 py-1 text-left text-[10px] leading-snug text-sky-200"
+        >
+          <ul className="space-y-0.5">
+            {visibleLines.map((line, idx) => (
+              <li key={idx} className="truncate font-mono text-[9.5px]">
+                {line}
+              </li>
+            ))}
+          </ul>
+          {hiddenLineCount > 0 && (
+            <div className="mt-0.5 text-[9px] text-sky-300/80">
+              +{hiddenLineCount} more change{hiddenLineCount > 1 ? "s" : ""} (right-click to undo)
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (activeFilter === "waiting_on_me" && latestQuestionPreview) {
+      return (
+        <div
+          data-testid="node-question-preview"
+          className="mt-1.5 w-full rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1 text-left text-[10px] leading-snug text-amber-200"
+        >
+          <p className="line-clamp-2">
+            <span className="font-semibold text-amber-300">Q: </span>
+            {latestQuestionPreview}
+          </p>
+        </div>
+      );
+    }
+
+    if (activeFilter === "drifted" && node.status === "drifted") {
+      const refCount = node.code_refs?.length ?? 0;
+      return (
+        <div
+          data-testid="node-drifted-summary"
+          className="mt-1.5 w-full rounded-md border border-rose-500/35 bg-rose-500/10 px-2 py-1 text-left text-[10px] leading-snug text-rose-200"
+        >
+          <p className="truncate">
+            Code drifted ({refCount} ref{refCount === 1 ? "" : "s"}) • right-click to update
+          </p>
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   const threadsButton =
     totalOpenThreads > 0 ? (
@@ -397,6 +471,7 @@ function StructuredNodeComponent({
               </p>
             </OverflowTooltip>
           )}
+          {renderTriageStrip(true)}
           <div className="mt-0.5 flex items-center justify-center gap-1">
             {editedBadge}
             {threadsButton}
@@ -436,6 +511,7 @@ function StructuredNodeComponent({
               </p>
             </OverflowTooltip>
           )}
+          {renderTriageStrip(true)}
           {(node.entity_ref || (node.code_refs && node.code_refs.length > 0)) && (
             <div className="flex items-center gap-2 text-[9.5px] font-mono text-slate-400">
               {node.entity_ref && (
@@ -541,6 +617,7 @@ function StructuredNodeComponent({
             </p>
           </OverflowTooltip>
         )}
+        {renderTriageStrip(false)}
       </div>
 
       {/* ER Entity Attributes */}
