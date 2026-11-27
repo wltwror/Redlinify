@@ -1,9 +1,11 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ListRootsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { DesignStorage, type DesignView } from "@redlinify/shared";
 import {
   MCP_WORKFLOW_INSTRUCTIONS,
@@ -420,5 +422,145 @@ describe("Redlinify MCP Server (6 lean orthogonal tools)", () => {
       browser_opened: true,
     });
     expect(ensureCalls).toHaveLength(3);
+  });
+
+  it("switches project root dynamically via MCP roots/list and blocks accidental writes in unsafe default dirs", async () => {
+    const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), "redlinify-roots-"));
+    const unsafeHome = path.join(tmpBase, "home");
+    const parentWithDesign = path.join(tmpBase, "parent");
+    const repoB = path.join(parentWithDesign, "repo-b");
+    const repoBSub = path.join(repoB, "src");
+    const repoC = path.join(tmpBase, "repo-c");
+
+    await fs.mkdir(unsafeHome, { recursive: true });
+    await new DesignStorage(parentWithDesign).initWorkspace("Parent");
+    await fs.mkdir(path.join(repoB, ".git"), { recursive: true });
+    await fs.mkdir(repoBSub, { recursive: true });
+    await new DesignStorage(repoC).initWorkspace("RepoC");
+
+    // Guard blocks uninitialized writes in unsafeHome when !explicitDir & no roots
+    const guardServer = createRedlinifyMcpServer(new DesignStorage(unsafeHome), {
+      unsafeRootDirs: [unsafeHome],
+    });
+    const guardClient = new Client({ name: "guard-client", version: "0.1.0" });
+    const [gcTransport, gsTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      guardServer.connect(gsTransport),
+      guardClient.connect(gcTransport),
+    ]);
+
+    const unsafeRead = parseToolJson<{ initialized: boolean; root_dir: string }>(
+      await guardClient.callTool({ name: "get_workspace", arguments: {} }),
+    );
+    expect(unsafeRead.initialized).toBe(false);
+    expect(unsafeRead.root_dir).toBe(path.resolve(unsafeHome));
+
+    const unsafeWrite = await guardClient.callTool({
+      name: "save_view",
+      arguments: { view_id: "arch", title: "Should Fail", nodes: [], edges: [] },
+    });
+    expect(unsafeWrite.isError).toBe(true);
+    const unsafeErr = parseToolJson<{ error: string; message: string }>(unsafeWrite);
+    expect(unsafeErr.error).toBe("VALIDATION_ERROR");
+    expect(unsafeErr.message).toContain("Refusing to initialize .design/");
+    await guardClient.close();
+    await guardServer.close();
+
+    // Dynamic roots/list & notifications/roots/list_changed resolve isolated repos
+    let currentRoots = [{ uri: pathToFileURL(repoBSub).href, name: "repo-b" }];
+    const ensureRootDirs: string[] = [];
+    const server = createRedlinifyMcpServer(new DesignStorage(unsafeHome), {
+      unsafeRootDirs: [unsafeHome],
+      ensureUi: async (opts) => {
+        if (opts?.rootDir) ensureRootDirs.push(path.resolve(opts.rootDir));
+        return {
+          url: `http://127.0.0.1:${ensureRootDirs.length === 1 ? 4174 : 4175}`,
+          started: true,
+        };
+      },
+    });
+    const client = new Client(
+      { name: "roots-client", version: "0.1.0" },
+      { capabilities: { roots: { listChanged: true } } },
+    );
+    client.setRequestHandler(ListRootsRequestSchema, () => ({
+      roots: currentRoots,
+    }));
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+
+    cleanups.push(async () => {
+      await client.close();
+      await server.close();
+      await fs.rm(tmpBase, { recursive: true, force: true });
+    });
+
+    const initialWs = parseToolJson<{ root_dir: string; initialized: boolean }>(
+      await client.callTool({ name: "get_workspace", arguments: {} }),
+    );
+    expect(initialWs.root_dir).toBe(path.resolve(repoB));
+    expect(initialWs.initialized).toBe(false);
+
+    const savedB = parseToolJson<{ ui_url?: string }>(
+      await client.callTool({
+        name: "save_view",
+        arguments: {
+          view_id: "svc",
+          title: "Service B",
+          nodes: [
+            {
+              id: "b1",
+              kind: "Service",
+              title: "B1",
+              status: "draft",
+              locked: false,
+              sections: [],
+            },
+          ],
+          edges: [],
+        },
+      }),
+    );
+    expect(savedB.ui_url).toBe("http://127.0.0.1:4174/#view=svc");
+    expect(ensureRootDirs).toEqual([path.resolve(repoB)]);
+    expect((await new DesignStorage(parentWithDesign).listViewIds())).toEqual([]);
+
+    // Switch active workspace via notifications/roots/list_changed
+    currentRoots = [{ uri: pathToFileURL(repoC).href, name: "repo-c" }];
+    await client.notification({ method: "notifications/roots/list_changed" });
+    const switchedWs = parseToolJson<{
+      root_dir: string;
+      project_name: string;
+    }>(await client.callTool({ name: "get_workspace", arguments: {} }));
+    expect(switchedWs.root_dir).toBe(path.resolve(repoC));
+    expect(switchedWs.project_name).toBe("RepoC");
+
+    // explicitDir=true keeps caller --dir pinned even when client advertises roots
+    const pinnedServer = createRedlinifyMcpServer(new DesignStorage(repoC), {
+      explicitDir: true,
+    });
+    const pinnedClient = new Client(
+      { name: "pinned-client", version: "0.1.0" },
+      { capabilities: { roots: { listChanged: true } } },
+    );
+    pinnedClient.setRequestHandler(ListRootsRequestSchema, () => ({
+      roots: [{ uri: pathToFileURL(repoB).href, name: "repo-b" }],
+    }));
+    const [pcTransport, psTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      pinnedServer.connect(psTransport),
+      pinnedClient.connect(pcTransport),
+    ]);
+    const pinnedWs = parseToolJson<{ root_dir: string }>(
+      await pinnedClient.callTool({ name: "get_workspace", arguments: {} }),
+    );
+    expect(pinnedWs.root_dir).toBe(path.resolve(repoC));
+    await pinnedClient.close();
+    await pinnedServer.close();
   });
 });

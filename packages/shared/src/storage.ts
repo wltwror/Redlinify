@@ -166,13 +166,6 @@ export async function findProjectRoot(startDir: string): Promise<string> {
     if (await pathExists(path.join(current, DESIGN_DIR_NAME))) {
       return current;
     }
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-
-  current = start;
-  while (true) {
     if (await pathExists(path.join(current, ".git"))) {
       return current;
     }

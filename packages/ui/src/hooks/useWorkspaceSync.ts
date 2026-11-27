@@ -70,6 +70,8 @@ export function useWorkspaceSync({
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   const layoutVersionRef = useRef(0);
   const pendingViewportSyncRef = useRef<PendingViewportSync | null>(null);
+  const knownRootDirRef = useRef<string | null>(null);
+  const hasConnectedOnceRef = useRef(false);
 
   layoutVersionRef.current = Math.max(layoutVersionRef.current, layoutVersion);
   activeViewIdRef.current = activeViewId;
@@ -83,6 +85,9 @@ export function useWorkspaceSync({
       fetchWorkspace(),
       fetchThreads(),
     ]);
+    if (knownRootDirRef.current === null && wsSnap.root_dir) {
+      knownRootDirRef.current = wsSnap.root_dir;
+    }
     setSnapshot(wsSnap);
     setAllThreads(thrRes.threads);
     return wsSnap;
@@ -216,10 +221,45 @@ export function useWorkspaceSync({
   // WebSocket live updates
   useEffect(() => {
     const graceTimer = setTimeout(() => setWsGraceExpired(true), 2000);
+    const syncAndDetectProjectSwitch = async (ws: WorkspaceSnapshot) => {
+      const prevRoot = knownRootDirRef.current;
+      if (ws.root_dir && prevRoot && ws.root_dir !== prevRoot) {
+        knownRootDirRef.current = ws.root_dir;
+        if (measuredSizesRef) measuredSizesRef.current = {};
+        if (elkRoutesRef) elkRoutesRef.current = {};
+        positionsRef.current = {};
+        edgeRoutesRef.current = {};
+        const nextFirst = ws.status.tabs[0]?.view_id ?? null;
+        setActiveViewId(nextFirst);
+        if (nextFirst) {
+          window.location.hash = `view=${encodeURIComponent(nextFirst)}`;
+          await loadViewDetail(nextFirst);
+        } else {
+          window.location.hash = "";
+          activeViewRef.current = null;
+          setActiveView(null);
+          setViewHash(undefined);
+          setViewDiff(null);
+        }
+        showToast(
+          `Server switched to project "${ws.status.project_name}"`,
+          "warning",
+        );
+        return true;
+      }
+      if (ws.root_dir) {
+        knownRootDirRef.current = ws.root_dir;
+      }
+      return false;
+    };
+
     const disconnect = connectWebSocket(
       (event) => {
         void (async () => {
-          await loadWorkspaceMeta();
+          const ws = await loadWorkspaceMeta();
+          if (await syncAndDetectProjectSwitch(ws)) {
+            return;
+          }
           const currentId = activeViewIdRef.current;
 
           if (
@@ -244,7 +284,6 @@ export function useWorkspaceSync({
             event.type === "workspace_updated" &&
             event.origin === "external"
           ) {
-            const ws = await loadWorkspaceMeta();
             if (!currentId && ws.status.tabs[0]?.view_id) {
               const first = ws.status.tabs[0].view_id;
               setActiveViewId(first);
@@ -255,14 +294,33 @@ export function useWorkspaceSync({
       },
       (connected) => {
         setWsConnected(connected);
-        if (connected) setWsEverConnected(true);
+        if (connected) {
+          const reconnected = hasConnectedOnceRef.current;
+          hasConnectedOnceRef.current = true;
+          setWsEverConnected(true);
+          if (reconnected) {
+            void loadWorkspaceMeta()
+              .then((ws) => syncAndDetectProjectSwitch(ws))
+              .catch(() => {});
+          }
+        }
       },
     );
     return () => {
       clearTimeout(graceTimer);
       disconnect();
     };
-  }, [activeViewIdRef, loadViewDetail, loadWorkspaceMeta, showToast]);
+  }, [
+    activeViewIdRef,
+    activeViewRef,
+    edgeRoutesRef,
+    elkRoutesRef,
+    loadViewDetail,
+    loadWorkspaceMeta,
+    measuredSizesRef,
+    positionsRef,
+    showToast,
+  ]);
 
   const persistView = useCallback(
     async (nextView: DesignView, options?: { recordHistory?: boolean }) => {

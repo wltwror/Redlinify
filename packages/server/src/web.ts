@@ -279,7 +279,12 @@ export async function createWebServer(
                 pending_threads: [],
                 view_requests: [],
               };
-          sendJson(res, 200, { workspace, status, pending_feedback });
+          sendJson(res, 200, {
+            workspace,
+            status,
+            pending_feedback,
+            root_dir: path.resolve(storage.rootDir),
+          });
           return;
         }
 
@@ -627,9 +632,10 @@ export async function createWebServer(
     }
   });
 
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  let wss: WebSocketServer | undefined;
 
   function broadcast(event: WsEvent): void {
+    if (!wss) return;
     const payload = JSON.stringify(event);
     for (const client of wss.clients) {
       if (client.readyState === WebSocket.OPEN) {
@@ -683,6 +689,16 @@ export async function createWebServer(
     }
   }
 
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  wss = new WebSocketServer({ server, path: "/ws" });
+
   if (options.watch !== false) {
     await fs.mkdir(storage.designDir, { recursive: true });
     watcher = chokidar.watch(storage.designDir, {
@@ -723,14 +739,6 @@ export async function createWebServer(
     watcher.on("unlink", onFsChange);
   }
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, host, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-
   const addr = server.address();
   const actualPort =
     addr && typeof addr === "object" ? addr.port : port;
@@ -744,17 +752,26 @@ export async function createWebServer(
       if (watcher) {
         await watcher.close();
       }
-      for (const client of wss.clients) {
-        client.terminate();
-      }
-      await new Promise<void>((resolve, reject) => {
-        wss.close(() => {
+      if (wss) {
+        for (const client of wss.clients) {
+          client.terminate();
+        }
+        await new Promise<void>((resolve, reject) => {
+          wss!.close(() => {
+            server.close((err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+      } else {
+        await new Promise<void>((resolve, reject) => {
           server.close((err) => {
             if (err) reject(err);
             else resolve();
           });
         });
-      });
+      }
     },
   };
 }

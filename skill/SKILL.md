@@ -16,7 +16,7 @@ Use Redlinify whenever designing, refactoring, or clarifying non-trivial softwar
 
 ## 2. Ask in the Diagram, Not in Chat
 * When facing a genuine architectural tradeoff or ambiguity, commit your best draft choice, set the node's `status` to `"needs_input"`, and anchor a concise `question` thread on that exact node or edge via `post_thread`.
-* Share the clickable `ui_url` returned by `save_view` (or call `get_workspace({ open_browser: true })`) and keep your chat message brief (e.g., *"Drafted 3 views and pinned 2 questions — open `http://127.0.0.1:4173` to review"*).
+* Share the exact clickable `ui_url` returned by `save_view` (or call `get_workspace({ open_browser: true })` — concurrent projects automatically bind to distinct ports such as `4173`, `4174`, …) and keep your chat message brief (e.g., *"Drafted 3 views and pinned 2 questions — open `<ui_url>` to review"*).
 
 ## 3. Iterating on Human Feedback
 1. Always begin by calling `get_workspace()`.
