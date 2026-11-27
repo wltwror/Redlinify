@@ -26,6 +26,7 @@ import { ContextMenu } from "./ContextMenu";
 
 interface TabBarProps {
   projectName: string;
+  projectRootDir?: string;
   tabs: TabStatusSummary[];
   viewRequests: ViewRequest[];
   activeViewId: string | null;
@@ -48,6 +49,7 @@ interface TabBarProps {
 
 export function TabBar({
   projectName,
+  projectRootDir,
   tabs,
   viewRequests,
   activeViewId,
@@ -228,7 +230,14 @@ export function TabBar({
           <span className="text-xs font-semibold tracking-wide text-slate-100">
             Redlinify
           </span>
-          <span className="hidden sm:inline-block rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-mono text-slate-400">
+          <span
+            title={
+              projectRootDir
+                ? `${projectName} (${projectRootDir})`
+                : projectName
+            }
+            className="hidden sm:inline-block rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-mono text-slate-400"
+          >
             {projectName}
           </span>
         </div>

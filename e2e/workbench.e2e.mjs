@@ -412,6 +412,12 @@ async function main() {
     });
     await page.waitForTimeout(300);
     assert.equal(await zoomBtn.getAttribute("aria-pressed"), "true");
+    assert.equal(await page.title(), "RedlinifyE2E — Redlinify");
+    const badgeTitle = await page.getByText("RedlinifyE2E").first().getAttribute("title");
+    assert.ok(
+      badgeTitle?.includes(tmpRepo),
+      `Expected project badge title to include root dir (${badgeTitle})`,
+    );
     await panBtn.click();
     await page.waitForTimeout(120);
     assert.equal(await panBtn.getAttribute("aria-pressed"), "true");

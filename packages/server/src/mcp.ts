@@ -1,11 +1,14 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, z } from "zod";
 import {
   CardinalitySchema,
   CodeRefUpdateSchema,
+  DESIGN_DIR_NAME,
   DesignEdgeSchema,
   DesignError,
   DesignNodeSchema,
@@ -22,16 +25,20 @@ import {
   ValidationError,
   ViewDirectionSchema,
   ViewPatchSchema,
+  findProjectRoot,
   idSlugSchema,
 } from "@redlinify/shared";
 
 export interface RedlinifyMcpOptions {
-  ensureUi?: (opts?: { openBrowser?: boolean }) => Promise<{
+  ensureUi?: (opts?: { openBrowser?: boolean; rootDir?: string }) => Promise<{
     url: string;
     started: boolean;
     browser_opened?: boolean;
   } | null>;
-  getRunningUiUrl?: () => Promise<string | null>;
+  getRunningUiUrl?: (rootDir?: string) => Promise<string | null>;
+  explicitDir?: boolean;
+  onRootDirChange?: (rootDir: string) => void;
+  unsafeRootDirs?: string[];
 }
 
 export const MCP_WORKFLOW_INSTRUCTIONS = `Redlinify is a Git-native architecture & ER workbench in .design/ (IDs: lowercase slugs a-z0-9_-; entity_ref: snake_case).
@@ -221,6 +228,25 @@ function readPackageVersion(): string {
   }
 }
 
+function normalizeComparePath(dirPath: string): string {
+  const resolved = path.resolve(dirPath);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isUnsafeDefaultRoot(rootDir: string, unsafeDirs: string[]): boolean {
+  const resolved = path.resolve(rootDir);
+  const isFsRoot = path.dirname(resolved) === resolved;
+  const normalized = normalizeComparePath(resolved);
+  const matchesUnsafe =
+    isFsRoot ||
+    unsafeDirs.some((candidate) => normalizeComparePath(candidate) === normalized);
+  if (!matchesUnsafe) return false;
+  return (
+    !existsSync(path.join(resolved, DESIGN_DIR_NAME, "workspace.json")) &&
+    !existsSync(path.join(resolved, ".git"))
+  );
+}
+
 export function createRedlinifyMcpServer(
   storage: DesignStorage,
   options?: RedlinifyMcpOptions,
@@ -235,10 +261,78 @@ export function createRedlinifyMcpServer(
     },
   );
 
-  const ensureViewUiUrl = async (viewId: string): Promise<string | undefined> => {
+  const unsafeDirs = options?.unsafeRootDirs ?? [os.homedir()];
+  let activeStorage = storage;
+  let pendingRootsSync: Promise<void> | null = null;
+
+  const syncFromClientRoots = async (): Promise<void> => {
+    if (options?.explicitDir) return;
+    if (!server.server.getClientCapabilities()?.roots) return;
+    try {
+      const { roots } = await server.server.listRoots();
+      for (const root of roots) {
+        if (!root.uri?.startsWith("file:")) continue;
+        let candidatePath: string;
+        try {
+          candidatePath = fileURLToPath(root.uri);
+        } catch {
+          continue;
+        }
+        if (!existsSync(candidatePath)) continue;
+        const nextRoot = await findProjectRoot(candidatePath);
+        if (
+          normalizeComparePath(nextRoot) !==
+          normalizeComparePath(activeStorage.rootDir)
+        ) {
+          activeStorage = new DesignStorage(nextRoot);
+          options?.onRootDirChange?.(nextRoot);
+        }
+        break;
+      }
+    } catch {
+      // Client does not support roots/list or timed out; retain activeStorage
+    }
+  };
+
+  server.server.oninitialized = () => {
+    pendingRootsSync = syncFromClientRoots().finally(() => {
+      pendingRootsSync = null;
+    });
+  };
+
+  server.server.setNotificationHandler(
+    RootsListChangedNotificationSchema,
+    async () => {
+      pendingRootsSync = syncFromClientRoots().finally(() => {
+        pendingRootsSync = null;
+      });
+      await pendingRootsSync;
+    },
+  );
+
+  const getActiveStorage = async (forWrite = false): Promise<DesignStorage> => {
+    if (pendingRootsSync) {
+      await pendingRootsSync;
+    }
+    if (
+      forWrite &&
+      !options?.explicitDir &&
+      isUnsafeDefaultRoot(activeStorage.rootDir, unsafeDirs)
+    ) {
+      throw new ValidationError(
+        `Refusing to initialize .design/ in home or filesystem root directory (${activeStorage.rootDir}) because multiple projects would share it. Run 'redlinify mcp' inside a project repo, pass '--dir /path/to/project', or enable MCP workspace roots.`,
+      );
+    }
+    return activeStorage;
+  };
+
+  const ensureViewUiUrl = async (
+    viewId: string,
+    targetRootDir: string,
+  ): Promise<string | undefined> => {
     if (!options?.ensureUi) return undefined;
     try {
-      const ui = await options.ensureUi();
+      const ui = await options.ensureUi({ rootDir: targetRootDir });
       return ui?.url ? viewDeepLink(ui.url, viewId) : undefined;
     } catch {
       return undefined;
@@ -262,17 +356,39 @@ export function createRedlinifyMcpServer(
     },
     async ({ view_id, include_diff, open_browser }) => {
       try {
+        const currentStorage = await getActiveStorage(false);
         const validViewId = view_id ? idSlugSchema("view_id").parse(view_id) : undefined;
-        const status = await storage.getWorkspaceStatus();
+        if (
+          !options?.explicitDir &&
+          isUnsafeDefaultRoot(currentStorage.rootDir, unsafeDirs)
+        ) {
+          return okResult({
+            root_dir: path.resolve(currentStorage.rootDir),
+            initialized: false,
+            project_name:
+              path.basename(currentStorage.rootDir) || "redlinify-project",
+            tabs: [],
+            workspace_threads_waiting_on_agent: 0,
+            workspace_threads_waiting_on_human: 0,
+            view_requests: [],
+            entity_refs: {},
+          });
+        }
+        const status = await currentStorage.getWorkspaceStatus();
         const feedback =
-          include_diff === false ? null : await storage.getPendingFeedback(validViewId);
+          include_diff === false
+            ? null
+            : await currentStorage.getPendingFeedback(validViewId);
 
         let uiFields: Record<string, unknown> = {};
         if (open_browser) {
           if (!options?.ensureUi) {
             uiFields = { ui_available: false };
           } else {
-            const ui = await options.ensureUi({ openBrowser: true });
+            const ui = await options.ensureUi({
+              openBrowser: true,
+              rootDir: currentStorage.rootDir,
+            });
             if (ui?.url) {
               uiFields = {
                 ui_available: true,
@@ -285,7 +401,9 @@ export function createRedlinifyMcpServer(
             }
           }
         } else if (options?.getRunningUiUrl) {
-          const runningUrl = await options.getRunningUiUrl().catch(() => null);
+          const runningUrl = await options
+            .getRunningUiUrl(currentStorage.rootDir)
+            .catch(() => null);
           if (runningUrl) {
             uiFields = {
               ui_url: validViewId ? viewDeepLink(runningUrl, validViewId) : runningUrl,
@@ -294,6 +412,7 @@ export function createRedlinifyMcpServer(
         }
 
         return okResult({
+          root_dir: path.resolve(currentStorage.rootDir),
           ...status,
           ...(feedback
             ? {
@@ -326,17 +445,18 @@ export function createRedlinifyMcpServer(
     },
     async ({ view_id, include_resolved_summaries }) => {
       try {
+        const currentStorage = await getActiveStorage(false);
         const validViewId = idSlugSchema("view_id").parse(view_id);
         const [{ view, view_hash }, open_threads] = await Promise.all([
-          storage.readView(validViewId),
-          storage.listThreads({ view_id: validViewId, status: "open" }),
+          currentStorage.readView(validViewId),
+          currentStorage.listThreads({ view_id: validViewId, status: "open" }),
         ]);
 
         if (!include_resolved_summaries) {
           return okResult({ view, view_hash, open_threads });
         }
 
-        const resolvedThreads = await storage.listThreads({
+        const resolvedThreads = await currentStorage.listThreads({
           view_id: validViewId,
           status: "resolved",
         });
@@ -380,7 +500,8 @@ export function createRedlinifyMcpServer(
     },
     async ({ view_id, target_id, entity_ref, query, status }) => {
       try {
-        const threads = await storage.listThreads({
+        const currentStorage = await getActiveStorage(false);
+        const threads = await currentStorage.listThreads({
           status: status === "all" ? undefined : (status ?? "resolved"),
           view_id: view_id ? idSlugSchema("view_id").parse(view_id) : undefined,
           target_id: target_id ? idSlugSchema("target_id").parse(target_id) : undefined,
@@ -437,6 +558,7 @@ export function createRedlinifyMcpServer(
       acknowledge_views,
     }) => {
       try {
+        const currentStorage = await getActiveStorage(true);
         const resolvedMode =
           mode ?? (acknowledge_views?.length ? "acknowledge" : "replace");
 
@@ -456,7 +578,7 @@ export function createRedlinifyMcpServer(
             view_id: idSlugSchema("view_id").parse(e.view_id),
             base_hash: z.string().min(1, "base_hash is required").parse(e.base_hash),
           }));
-          const res = await storage.acknowledgeFeedback(validatedEntries);
+          const res = await currentStorage.acknowledgeFeedback(validatedEntries);
           return okResult({ mode: "acknowledge", ...res });
         }
 
@@ -471,7 +593,7 @@ export function createRedlinifyMcpServer(
               "base_hash is required for save_view mode='patch'",
             );
           }
-          const { view: currentView } = await storage.readView(validViewId);
+          const { view: currentView } = await currentStorage.readView(validViewId);
           const existingNodeIds = new Set(currentView.nodes.map((n) => n.id));
           const existingEdgeIds = new Set(currentView.edges.map((e) => e.id));
 
@@ -516,13 +638,16 @@ export function createRedlinifyMcpServer(
             ...(remove_edges?.length ? { remove_edges } : {}),
           });
 
-          const res = await storage.patchView({
+          const res = await currentStorage.patchView({
             view_id: validViewId,
             base_hash,
             patch: parsedPatch,
             actor: "agent",
           });
-          const ui_url = await ensureViewUiUrl(res.view.id);
+          const ui_url = await ensureViewUiUrl(
+            res.view.id,
+            currentStorage.rootDir,
+          );
           return okResult({
             mode: "patch",
             view_id: res.view.id,
@@ -548,7 +673,7 @@ export function createRedlinifyMcpServer(
           edges: (edges ?? []).map((e) => omitNullFields(e)),
         });
 
-        const res = await storage.upsertView({
+        const res = await currentStorage.upsertView({
           view: sanitizedView,
           base_hash,
           fulfill_request_id: fulfill_request_id
@@ -557,7 +682,10 @@ export function createRedlinifyMcpServer(
           actor: "agent",
           force,
         });
-        const ui_url = await ensureViewUiUrl(res.view.id);
+        const ui_url = await ensureViewUiUrl(
+          res.view.id,
+          currentStorage.rootDir,
+        );
         return okResult({
           mode: "replace",
           view_id: res.view.id,
@@ -597,7 +725,8 @@ export function createRedlinifyMcpServer(
     },
     async (args) => {
       try {
-        const thread = await storage.postThreadMessage({
+        const currentStorage = await getActiveStorage(true);
+        const thread = await currentStorage.postThreadMessage({
           thread_id: args.thread_id
             ? idSlugSchema("thread_id").parse(args.thread_id)
             : undefined,
@@ -646,11 +775,15 @@ export function createRedlinifyMcpServer(
     },
     async ({ view_id, updates }) => {
       try {
+        const currentStorage = await getActiveStorage(true);
         if (updates.length === 0) {
           throw new ValidationError("updates must contain at least one entry");
         }
         const parsedUpdates = updates.map((u) => CodeRefUpdateSchema.parse(u));
-        const res = await storage.syncCodeRefs({ view_id, updates: parsedUpdates });
+        const res = await currentStorage.syncCodeRefs({
+          view_id,
+          updates: parsedUpdates,
+        });
         return okResult({
           view_id: res.view.id,
           view_hash: res.view_hash,

@@ -115,6 +115,15 @@ describe("Redlinify HTTP + WebSocket server", () => {
       pid: process.pid,
     });
 
+    const wsRes = await fetch(`${server.url}/api/workspace`);
+    expect(wsRes.status).toBe(200);
+    const wsJson = (await wsRes.json()) as {
+      root_dir?: string;
+      status: { project_name: string };
+    };
+    expect(wsJson.root_dir).toBe(path.resolve(dir));
+    expect(wsJson.status.project_name).toBe("WebTest");
+
     const viewRes = await fetch(`${server.url}/api/views/classes`);
     expect(viewRes.status).toBe(200);
     const viewJson = (await viewRes.json()) as {

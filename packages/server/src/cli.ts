@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { DesignStorage, findProjectRoot } from "@redlinify/shared";
 import { createRedlinifyMcpServer } from "./mcp.js";
 import {
+  canonicalizeRootDir,
   ensureUiServer,
   getRunningUiUrl,
   openUrlInBrowser,
@@ -57,6 +58,14 @@ function parsePortFlag(raw: string | undefined, fallback = 4173): number {
     throw new Error(`Invalid port: ${raw}`);
   }
   return port;
+}
+
+function isAddrInUseError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    "code" in err &&
+    (err as NodeJS.ErrnoException).code === "EADDRINUSE"
+  );
 }
 
 function resolveUiDistDir(): string | undefined {
@@ -193,24 +202,30 @@ async function main(): Promise<void> {
     const preferredPort = parsePortFlag(flags.port);
     const autoUi = flags["no-ui"] !== "true";
     const openOnAutoStart = flags.open === "true";
+    const explicitDir = Boolean(flags.dir);
     const cliEntryPath = fileURLToPath(import.meta.url);
 
     const server = createRedlinifyMcpServer(
       storage,
       autoUi
         ? {
+            explicitDir,
             ensureUi: (opts) =>
               ensureUiServer({
-                rootDir,
+                rootDir: opts?.rootDir ?? rootDir,
                 preferredPort,
                 host: "127.0.0.1",
                 openBrowser: opts?.openBrowser ?? openOnAutoStart,
                 cliEntryPath,
               }),
-            getRunningUiUrl: () =>
-              getRunningUiUrl(rootDir, preferredPort, "127.0.0.1"),
+            getRunningUiUrl: (targetRoot) =>
+              getRunningUiUrl(
+                targetRoot ?? rootDir,
+                preferredPort,
+                "127.0.0.1",
+              ),
           }
-        : undefined,
+        : { explicitDir },
     );
     const transport = new StdioServerTransport();
     await server.connect(transport);
@@ -222,7 +237,23 @@ async function main(): Promise<void> {
 
   if (command === "ui") {
     const host = flags.host ?? "127.0.0.1";
+    const explicitPort = Boolean(flags.port);
     const port = parsePortFlag(flags.port);
+    const autoPort = flags["auto-port"] === "true" || !explicitPort;
+
+    if (!explicitPort && flags["auto-port"] !== "true") {
+      const existingUrl = await getRunningUiUrl(rootDir, port, host);
+      if (existingUrl) {
+        process.stdout.write(
+          `Redlinify UI is already running at ${existingUrl} (project root: ${rootDir})\n`,
+        );
+        if (flags.open === "true") {
+          openUrlInBrowser(existingUrl);
+        }
+        return;
+      }
+    }
+
     const uiDistDir = resolveUiDistDir();
     if (!uiDistDir) {
       process.stderr.write(
@@ -230,20 +261,42 @@ async function main(): Promise<void> {
       );
     }
 
+    const startWebServer = async () => {
+      if (!autoPort) {
+        return await createWebServer({ storage, host, port, uiDistDir });
+      }
+      const basePort = port > 0 ? port : 4173;
+      const candidates: number[] = [];
+      for (let offset = 0; offset <= 50; offset++) {
+        const candidate = basePort + offset;
+        if (candidate <= 65535) candidates.push(candidate);
+      }
+      candidates.push(0);
+      let lastErr: unknown;
+      for (const candidate of candidates) {
+        try {
+          return await createWebServer({
+            storage,
+            host,
+            port: candidate,
+            uiDistDir,
+          });
+        } catch (err) {
+          if (isAddrInUseError(err)) {
+            lastErr = err;
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw lastErr;
+    };
+
     let running;
     try {
-      running = await createWebServer({
-        storage,
-        host,
-        port,
-        uiDistDir,
-      });
+      running = await startWebServer();
     } catch (err) {
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as NodeJS.ErrnoException).code === "EADDRINUSE"
-      ) {
+      if (isAddrInUseError(err)) {
         process.stderr.write(
           `[redlinify ui] Port ${port} on ${host} is already in use. Choose another port with --port <number>.\n`,
         );
@@ -257,7 +310,7 @@ async function main(): Promise<void> {
       port: running.port,
       host: running.host,
       url: running.url,
-      root_dir: path.resolve(rootDir),
+      root_dir: canonicalizeRootDir(rootDir),
       started_at: new Date().toISOString(),
     });
 
@@ -270,7 +323,7 @@ async function main(): Promise<void> {
     }
 
     const shutdown = async () => {
-      await removeUiMeta(rootDir);
+      await removeUiMeta(rootDir, process.pid);
       await running.close().catch(() => {});
       process.exit(0);
     };

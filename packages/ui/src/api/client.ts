@@ -55,6 +55,7 @@ export interface WorkspaceSnapshot {
   workspace: WorkspaceFile;
   status: WorkspaceStatusResult;
   pending_feedback: PendingFeedbackResult;
+  root_dir?: string;
 }
 
 export interface ViewDetailResponse {

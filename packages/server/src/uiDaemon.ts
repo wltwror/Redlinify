@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, promises as fs } from "node:fs";
+import { existsSync, promises as fs, realpathSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +42,25 @@ const inFlightEnsures = new Map<string, Promise<EnsureUiServerResult>>();
 
 function uiMetaPath(rootDir: string): string {
   return path.join(path.resolve(rootDir), DESIGN_DIR_NAME, UI_SERVER_META_FILE);
+}
+
+export function canonicalizeRootDir(dirPath: string): string {
+  const resolved = path.resolve(dirPath);
+  try {
+    return typeof realpathSync.native === "function"
+      ? realpathSync.native(resolved)
+      : realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+export function sameRootDir(a: string, b: string): boolean {
+  const ca = canonicalizeRootDir(a);
+  const cb = canonicalizeRootDir(b);
+  return process.platform === "win32"
+    ? ca.toLowerCase() === cb.toLowerCase()
+    : ca === cb;
 }
 
 /**
@@ -102,7 +121,7 @@ export async function probeHealth(
     if (
       data.ok === true &&
       typeof data.root_dir === "string" &&
-      path.resolve(data.root_dir) === path.resolve(expectedRootDir)
+      sameRootDir(data.root_dir, expectedRootDir)
     ) {
       return {
         ok: true,
@@ -172,20 +191,28 @@ export async function writeUiMeta(
   meta: UiServerMeta,
 ): Promise<void> {
   const designDir = path.join(path.resolve(rootDir), DESIGN_DIR_NAME);
-  if (!existsSync(designDir)) return;
   try {
-    await fs.writeFile(
-      uiMetaPath(rootDir),
-      `${JSON.stringify(meta, null, 2)}\n`,
-      "utf8",
-    );
+    await fs.mkdir(designDir, { recursive: true });
+    const target = uiMetaPath(rootDir);
+    const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+    await fs.writeFile(tmp, `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+    await fs.rename(tmp, target);
   } catch {
     // Best-effort runtime metadata write
   }
 }
 
-export async function removeUiMeta(rootDir: string): Promise<void> {
+export async function removeUiMeta(
+  rootDir: string,
+  expectedPid?: number,
+): Promise<void> {
   try {
+    if (expectedPid !== undefined) {
+      const current = await readUiMeta(rootDir);
+      if (current && current.pid !== expectedPid) {
+        return;
+      }
+    }
     await fs.unlink(uiMetaPath(rootDir));
   } catch {
     // Ignore missing metadata file
@@ -197,27 +224,29 @@ export async function getRunningUiUrl(
   preferredPort = 4173,
   host = "127.0.0.1",
 ): Promise<string | null> {
-  const resolvedRoot = path.resolve(rootDir);
+  const resolvedRoot = canonicalizeRootDir(rootDir);
   const meta = await readUiMeta(resolvedRoot);
   if (meta) {
     const alive = await probeHealth(meta.url, resolvedRoot);
     if (alive) return meta.url;
   }
 
-  const defaultUrl = `http://${host}:${preferredPort}`;
-  const defaultAlive = await probeHealth(defaultUrl, resolvedRoot);
-  if (defaultAlive) {
-    if (defaultAlive.pid !== undefined) {
-      await writeUiMeta(resolvedRoot, {
-        pid: defaultAlive.pid,
-        port: preferredPort,
-        host,
-        url: defaultUrl,
-        root_dir: resolvedRoot,
-        started_at: new Date().toISOString(),
-      });
+  if (preferredPort > 0) {
+    const defaultUrl = `http://${host}:${preferredPort}`;
+    const defaultAlive = await probeHealth(defaultUrl, resolvedRoot);
+    if (defaultAlive) {
+      if (defaultAlive.pid !== undefined) {
+        await writeUiMeta(resolvedRoot, {
+          pid: defaultAlive.pid,
+          port: preferredPort,
+          host,
+          url: defaultUrl,
+          root_dir: resolvedRoot,
+          started_at: new Date().toISOString(),
+        });
+      }
+      return defaultUrl;
     }
-    return defaultUrl;
   }
   return null;
 }
@@ -225,7 +254,7 @@ export async function getRunningUiUrl(
 async function ensureUiServerInternal(
   options: EnsureUiServerOptions,
 ): Promise<EnsureUiServerResult> {
-  const resolvedRoot = path.resolve(options.rootDir);
+  const resolvedRoot = canonicalizeRootDir(options.rootDir);
   const host = options.host ?? "127.0.0.1";
   const preferredPort = options.preferredPort ?? 4173;
 
@@ -246,29 +275,31 @@ async function ensureUiServerInternal(
     }
   }
 
-  const preferredUrl = `http://${host}:${preferredPort}`;
-  const preferredAlive = await probeHealth(preferredUrl, resolvedRoot);
-  if (preferredAlive) {
-    if (preferredAlive.pid !== undefined) {
-      await writeUiMeta(resolvedRoot, {
-        pid: preferredAlive.pid,
-        port: preferredPort,
-        host,
+  if (preferredPort > 0) {
+    const preferredUrl = `http://${host}:${preferredPort}`;
+    const preferredAlive = await probeHealth(preferredUrl, resolvedRoot);
+    if (preferredAlive) {
+      if (preferredAlive.pid !== undefined) {
+        await writeUiMeta(resolvedRoot, {
+          pid: preferredAlive.pid,
+          port: preferredPort,
+          host,
+          url: preferredUrl,
+          root_dir: resolvedRoot,
+          started_at: new Date().toISOString(),
+        });
+      }
+      const browser_opened = options.openBrowser
+        ? openUrlInBrowser(preferredUrl)
+        : false;
+      return {
         url: preferredUrl,
-        root_dir: resolvedRoot,
-        started_at: new Date().toISOString(),
-      });
+        port: preferredPort,
+        pid: preferredAlive.pid,
+        started: false,
+        browser_opened,
+      };
     }
-    const browser_opened = options.openBrowser
-      ? openUrlInBrowser(preferredUrl)
-      : false;
-    return {
-      url: preferredUrl,
-      port: preferredPort,
-      pid: preferredAlive.pid,
-      started: false,
-      browser_opened,
-    };
   }
 
   const cliPath =
@@ -278,11 +309,20 @@ async function ensureUiServerInternal(
     throw new Error(`Redlinify CLI entrypoint not found at ${cliPath}`);
   }
 
-  const port = await findAvailablePort(host, preferredPort);
-  const url = `http://${host}:${port}`;
+  const spawnStartedAt = Date.now() - 1000;
   const child = spawn(
     process.execPath,
-    [cliPath, "ui", "--dir", resolvedRoot, "--port", String(port), "--host", host],
+    [
+      cliPath,
+      "ui",
+      "--dir",
+      resolvedRoot,
+      "--port",
+      String(preferredPort),
+      "--host",
+      host,
+      "--auto-port",
+    ],
     {
       detached: true,
       stdio: "ignore",
@@ -291,47 +331,49 @@ async function ensureUiServerInternal(
   );
 
   let spawnError: Error | null = null;
+  let exitCode: number | null = null;
   child.once("error", (err) => {
     spawnError = err;
   });
+  child.once("exit", (code) => {
+    exitCode = code ?? 1;
+  });
   child.unref();
 
-  const deadline = Date.now() + 3500;
+  const deadline = Date.now() + 6000;
+  let readyMeta: UiServerMeta | null = null;
   let readyPid = child.pid;
-  let ready = false;
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
-    if (child.exitCode !== null) break;
-    const probe = await probeHealth(url, resolvedRoot, 350);
-    if (probe) {
-      readyPid = probe.pid ?? child.pid;
-      ready = true;
-      break;
+    const meta = await readUiMeta(resolvedRoot);
+    const isFreshMeta =
+      meta !== null &&
+      ((child.pid !== undefined && meta.pid === child.pid) ||
+        Date.parse(meta.started_at) >= spawnStartedAt);
+    if (isFreshMeta) {
+      const probe = await probeHealth(meta.url, resolvedRoot, 350);
+      if (probe) {
+        readyMeta = meta;
+        readyPid = probe.pid ?? meta.pid;
+        break;
+      }
     }
-    await new Promise((r) => setTimeout(r, 120));
+    if (exitCode !== null && !isFreshMeta) break;
+    await new Promise((r) => setTimeout(r, 90));
   }
 
-  if (!ready) {
+  if (!readyMeta) {
     throw new Error(
-      `Timed out waiting for Redlinify UI daemon to start on ${url}`,
+      `Timed out waiting for Redlinify UI daemon to start for ${resolvedRoot}`,
     );
   }
 
-  if (readyPid !== undefined) {
-    await writeUiMeta(resolvedRoot, {
-      pid: readyPid,
-      port,
-      host,
-      url,
-      root_dir: resolvedRoot,
-      started_at: new Date().toISOString(),
-    });
-  }
-
-  const browser_opened = options.openBrowser ? openUrlInBrowser(url) : false;
+  const browser_opened = options.openBrowser
+    ? openUrlInBrowser(readyMeta.url)
+    : false;
   return {
-    url,
-    port,
+    url: readyMeta.url,
+    port: readyMeta.port,
     pid: readyPid,
     started: true,
     browser_opened,
@@ -341,7 +383,7 @@ async function ensureUiServerInternal(
 export async function ensureUiServer(
   options: EnsureUiServerOptions,
 ): Promise<EnsureUiServerResult> {
-  const key = path.resolve(options.rootDir);
+  const key = canonicalizeRootDir(options.rootDir);
   const pending = inFlightEnsures.get(key);
   if (pending) {
     const res = await pending;
@@ -363,7 +405,7 @@ export async function stopUiServer(
   preferredPort = 4173,
   host = "127.0.0.1",
 ): Promise<StopUiServerResult> {
-  const resolvedRoot = path.resolve(rootDir);
+  const resolvedRoot = canonicalizeRootDir(rootDir);
   const meta = await readUiMeta(resolvedRoot);
   let targetPid = meta?.pid;
   let targetUrl = meta?.url;
@@ -375,7 +417,7 @@ export async function stopUiServer(
     } else if (alive.pid !== undefined) {
       targetPid = alive.pid;
     }
-  } else {
+  } else if (preferredPort > 0) {
     const fallbackUrl = `http://${host}:${preferredPort}`;
     const alive = await probeHealth(fallbackUrl, resolvedRoot);
     if (alive?.pid !== undefined) {
@@ -384,7 +426,7 @@ export async function stopUiServer(
     }
   }
 
-  await removeUiMeta(resolvedRoot);
+  await removeUiMeta(resolvedRoot, targetPid);
   if (targetPid === undefined) {
     return { stopped: false };
   }
