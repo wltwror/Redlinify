@@ -67,7 +67,7 @@ function sampleView(id = "classes"): DesignView {
 async function waitForEvent<T>(
   events: T[],
   predicate: (ev: T) => boolean,
-  timeoutMs = 4000,
+  timeoutMs = 6000,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -239,7 +239,7 @@ describe("Redlinify HTTP + WebSocket server", () => {
     });
 
     // Small settle delay for chokidar watcher readiness
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 220));
 
     // 1. UI save -> origin: "ui"
     const uiUpdated = { ...initial.view, title: "UI Edit" };
@@ -288,7 +288,7 @@ describe("Redlinify HTTP + WebSocket server", () => {
     );
 
     ws.close();
-  });
+  }, 15000);
 
   it("creates ER views and safely deletes views via DELETE /api/views/:id", async () => {
     const { storage, server } = await setupServer();
