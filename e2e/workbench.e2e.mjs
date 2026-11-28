@@ -218,8 +218,8 @@ async function dispatchWheel(
   );
 }
 
-async function assertAllNodesInViewport(page, label) {
-  const result = await page.evaluate(() => {
+async function getNodesOutsideViewport(page) {
+  return await page.evaluate(() => {
     const container = document.querySelector(".react-flow");
     const paneRect = container.getBoundingClientRect();
     const nodes = [...document.querySelectorAll(".react-flow__node")];
@@ -248,12 +248,28 @@ async function assertAllNodesInViewport(page, label) {
     }
     return { count: nodes.length, outside };
   });
+}
+
+async function assertAllNodesInViewport(page, label) {
+  const result = await getNodesOutsideViewport(page);
   assert.ok(result.count > 0, `${label}: expected nodes in viewport`);
   assert.deepEqual(
     result.outside,
     [],
     `${label}: nodes outside viewport: ${JSON.stringify(result.outside)}`,
   );
+}
+
+async function waitForAllNodesInViewport(page, label, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await getNodesOutsideViewport(page);
+    if (result.count > 0 && result.outside.length === 0) {
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
+  await assertAllNodesInViewport(page, label);
 }
 
 async function main() {
@@ -453,7 +469,7 @@ async function main() {
     assert.ok(tapDelta >= 80 && tapDelta <= 130, `tapDelta=${tapDelta}`);
 
     await page.keyboard.down("ArrowRight");
-    await page.waitForTimeout(560);
+    await page.waitForTimeout(680);
     await page.keyboard.up("ArrowRight");
     await page.waitForTimeout(80);
     const kHold = await getViewport(page);
@@ -980,14 +996,21 @@ async function main() {
       archBeforeN.nodes.length + 1,
       { timeout: 5000 },
     );
+    await page.getByRole("button", { name: "Close inspector" }).waitFor({
+      state: "visible",
+      timeout: 5000,
+    });
     const archAfterN = JSON.parse(await fs.readFile(archPath, "utf8"));
     const addedByShortcut = archAfterN.nodes.find((n) => !existingNIds.has(n.id));
     assert.ok(addedByShortcut, "Expected 'n' shortcut to create a new node");
 
     await clickEmptyPane(page);
+    await page.getByRole("button", { name: "Close inspector" }).waitFor({
+      state: "hidden",
+      timeout: 3000,
+    });
     await page.keyboard.press("r");
-    await page.waitForTimeout(450);
-    await assertAllNodesInViewport(page, "After 'r' auto-layout");
+    await waitForAllNodesInViewport(page, "After 'r' auto-layout", 5000);
 
     await page.keyboard.press("=");
     await page.keyboard.press("=");
@@ -995,10 +1018,21 @@ async function main() {
     const zoomedVp = await getViewport(page);
     await clickEmptyPane(page);
     await page.keyboard.press("Space");
-    await page.waitForTimeout(350);
+    await page.waitForFunction(
+      (prevZoom) => {
+        const el = document.querySelector(".react-flow__viewport");
+        if (!el) return false;
+        return (
+          Math.abs(new DOMMatrix(getComputedStyle(el).transform).a - prevZoom) >
+          0.01
+        );
+      },
+      zoomedVp.zoom,
+      { timeout: 3000 },
+    );
+    await waitForAllNodesInViewport(page, "After Space tap fit view", 4000);
     const spaceFitVp = await getViewport(page);
     assert.notEqual(spaceFitVp.zoom, zoomedVp.zoom);
-    await assertAllNodesInViewport(page, "After Space tap fit view");
 
     const questionsBtn = page
       .locator("button")
