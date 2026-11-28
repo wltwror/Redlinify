@@ -46,10 +46,13 @@ export interface InspectorDrawerProps {
   edgeRoute?: EdgeRoute;
   allThreads: DesignThread[];
   viewDiff: SemanticDiff | null;
+  viewBaseline?: DesignView | null;
   pendingFeedback: PendingFeedbackResult;
   status: WorkspaceStatusResult | null;
   onSaveNode: (updated: DesignNode) => Promise<void>;
   onDeleteNode: (nodeId: string) => Promise<void>;
+  onRevertNode?: (nodeId: string) => Promise<void>;
+  onRevertView?: () => Promise<void>;
   onSaveEdge: (updated: DesignEdge) => Promise<void>;
   onDeleteEdge: (edgeId: string) => Promise<void>;
   onUpdateEdgeRoute: (edgeId: string, patch: Partial<EdgeRoute> | null) => void;

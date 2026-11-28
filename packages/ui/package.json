@@ -1,6 +1,6 @@
 {
   "name": "@redlinify/ui",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Interactive React Flow + ELK browser workbench UI for Redlinify.",
   "license": "MIT",
   "author": "Vojtěch Faltus",
@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@redlinify/shared": "0.3.0",
+    "@redlinify/shared": "0.4.0",
     "@xyflow/react": "^12.4.4",
     "elkjs": "^0.9.3",
     "lucide-react": "^0.475.0",

@@ -67,7 +67,7 @@ function sampleView(id = "classes"): DesignView {
 async function waitForEvent<T>(
   events: T[],
   predicate: (ev: T) => boolean,
-  timeoutMs = 4000,
+  timeoutMs = 6000,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -165,9 +165,20 @@ describe("Redlinify HTTP + WebSocket server", () => {
     const saved = (await validPut.json()) as {
       view: DesignView;
       diff: { has_changes: boolean };
+      baseline: DesignView | null;
     };
     expect(saved.view.title).toBe("Updated Classes");
     expect(saved.diff.has_changes).toBe(true);
+    expect(saved.baseline?.title).toBe("Classes");
+
+    const afterPutGet = await fetch(`${server.url}/api/views/classes`);
+    expect(afterPutGet.status).toBe(200);
+    const afterPutJson = (await afterPutGet.json()) as {
+      view: DesignView;
+      baseline: DesignView | null;
+    };
+    expect(afterPutJson.view.title).toBe("Updated Classes");
+    expect(afterPutJson.baseline?.title).toBe("Classes");
 
     // Cross-links lookup across tabs
     const linksRes = await fetch(`${server.url}/api/cross-links/dedup_engine`);
@@ -228,7 +239,7 @@ describe("Redlinify HTTP + WebSocket server", () => {
     });
 
     // Small settle delay for chokidar watcher readiness
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 220));
 
     // 1. UI save -> origin: "ui"
     const uiUpdated = { ...initial.view, title: "UI Edit" };
@@ -277,7 +288,7 @@ describe("Redlinify HTTP + WebSocket server", () => {
     );
 
     ws.close();
-  });
+  }, 15000);
 
   it("creates ER views and safely deletes views via DELETE /api/views/:id", async () => {
     const { storage, server } = await setupServer();

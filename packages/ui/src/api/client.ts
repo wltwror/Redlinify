@@ -63,6 +63,7 @@ export interface ViewDetailResponse {
   view_hash: string;
   layout: ViewLayout;
   diff: SemanticDiff;
+  baseline: DesignView | null;
   threads: DesignThread[];
 }
 
@@ -189,7 +190,12 @@ export function fetchView(viewId: string): Promise<ViewDetailResponse> {
 export function saveView(
   view: DesignView,
   baseHash?: string,
-): Promise<{ view: DesignView; view_hash: string; diff: SemanticDiff }> {
+): Promise<{
+  view: DesignView;
+  view_hash: string;
+  diff: SemanticDiff;
+  baseline?: DesignView | null;
+}> {
   return requestJson(`/api/views/${encodeURIComponent(view.id)}`, {
     method: "PUT",
     body: JSON.stringify({ view, base_hash: baseHash }),

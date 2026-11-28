@@ -24,9 +24,9 @@ function readPackageVersion(): string {
     const parsed = JSON.parse(readFileSync(pkgPath, "utf8")) as {
       version?: unknown;
     };
-    return typeof parsed.version === "string" ? parsed.version : "0.3.0";
+    return typeof parsed.version === "string" ? parsed.version : "0.4.0";
   } catch {
-    return "0.3.0";
+    return "0.4.0";
   }
 }
 

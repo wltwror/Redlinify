@@ -21,7 +21,7 @@ import {
   type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Layers } from "lucide-react";
+import { Layers, RotateCcw } from "lucide-react";
 import {
   isThreadWaitingOnHuman,
   type DesignNode,
@@ -53,6 +53,13 @@ import { useViewportNavigation } from "../hooks/useViewportNavigation";
 import { useWorkspaceSearch } from "../hooks/useWorkspaceSearch";
 import { useWorkspaceSync } from "../hooks/useWorkspaceSync";
 import {
+  getModifiedEdgeIds,
+  revertEdgeToBaseline,
+  revertNodeToBaseline,
+  summarizeEdgeDiff,
+  summarizeNodeDiff,
+} from "../utils/diffSummary";
+import {
   VIEWPORT_MAX_ZOOM,
   VIEWPORT_MIN_ZOOM,
 } from "../utils/viewportNavigation";
@@ -76,6 +83,7 @@ const edgeTypes = { step: StepEdge };
 const MULTI_SELECTION_KEY_CODE = ["Control", "Meta"];
 const DELETE_KEY_CODE = ["Backspace", "Delete"];
 const PRO_OPTIONS = { hideAttribution: true };
+const DRAWER_TOGGLE_COOLDOWN_MS = 350;
 
 function getModifiedNodeIds(diff: SemanticDiff | null): Set<string> {
   const set = new Set<string>();
@@ -124,6 +132,8 @@ function WorkbenchInner() {
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const toggleCooldownRef = useRef<Record<string, number>>({});
   const positionsRef = useRef<Record<string, Point>>({});
   const edgeRoutesRef = useRef<Record<string, EdgeRoute>>({});
   const measuredSizesRef = useRef<
@@ -166,6 +176,7 @@ function WorkbenchInner() {
     setActiveView,
     viewDiff,
     setViewDiff,
+    viewBaseline,
     allThreads,
     wsConnected,
     wsEverConnected,
@@ -327,6 +338,187 @@ function WorkbenchInner() {
     showToast,
   });
 
+  const canTriggerToggle = useCallback((key: string): boolean => {
+    const now = Date.now();
+    const last = toggleCooldownRef.current[key] ?? 0;
+    if (now - last < DRAWER_TOGGLE_COOLDOWN_MS) {
+      return false;
+    }
+    toggleCooldownRef.current[key] = now;
+    return true;
+  }, []);
+
+  const editedNodeIds = useMemo(() => getModifiedNodeIds(viewDiff), [viewDiff]);
+  const editedEdgeIds = useMemo(() => getModifiedEdgeIds(viewDiff), [viewDiff]);
+
+  const handleRevertNode = useCallback(
+    async (nodeId: string) => {
+      if (!activeView) return;
+      const reverted = revertNodeToBaseline(activeView, viewBaseline, nodeId);
+      if (!reverted) {
+        showToast("No baseline state available to revert", "warning");
+        return;
+      }
+      const targetNode =
+        activeView.nodes.find((n) => n.id === nodeId) ??
+        viewBaseline?.nodes.find((n) => n.id === nodeId);
+      if (
+        selectedNodeId === nodeId &&
+        !reverted.nodes.some((n) => n.id === nodeId)
+      ) {
+        setSelectedNodeId(null);
+        setDrawerMode("none");
+      }
+      await persistView(reverted);
+      showToast(
+        `Reverted "${targetNode?.title ?? nodeId}" to unmodified state`,
+      );
+    },
+    [activeView, persistView, selectedNodeId, showToast, viewBaseline],
+  );
+
+  const handleRevertEdge = useCallback(
+    async (edgeId: string) => {
+      if (!activeView) return;
+      const reverted = revertEdgeToBaseline(activeView, viewBaseline, edgeId);
+      if (!reverted) {
+        showToast(
+          "Cannot revert edge (missing endpoint or baseline)",
+          "warning",
+        );
+        return;
+      }
+      if (
+        selectedEdgeId === edgeId &&
+        !reverted.edges.some((e) => e.id === edgeId)
+      ) {
+        setSelectedEdgeId(null);
+        setDrawerMode("none");
+      }
+      await persistView(reverted);
+      showToast("Reverted edge to unmodified state");
+    },
+    [activeView, persistView, selectedEdgeId, showToast, viewBaseline],
+  );
+
+  const handleRevertViewToBaseline = useCallback(async () => {
+    if (!activeView || !viewBaseline) {
+      showToast("No agent checkpoint baseline to revert to", "warning");
+      return;
+    }
+    const restored = structuredClone(viewBaseline);
+    if (
+      selectedNodeId &&
+      !restored.nodes.some((n) => n.id === selectedNodeId)
+    ) {
+      setSelectedNodeId(null);
+      setDrawerMode("none");
+    }
+    if (
+      selectedEdgeId &&
+      !restored.edges.some((e) => e.id === selectedEdgeId)
+    ) {
+      setSelectedEdgeId(null);
+      setDrawerMode("none");
+    }
+    await persistView(restored);
+    showToast(`Reverted "${activeView.title}" to unmodified state`);
+  }, [
+    activeView,
+    persistView,
+    selectedEdgeId,
+    selectedNodeId,
+    showToast,
+    viewBaseline,
+  ]);
+
+  const handleUnlockAllInView = useCallback(async () => {
+    if (!activeView) return;
+    await persistView({
+      ...activeView,
+      nodes: activeView.nodes.map((n) => ({ ...n, locked: false })),
+      edges: activeView.edges.map((e) => ({ ...e, locked: false })),
+    });
+    showToast(`Unlocked all elements in "${activeView.title}"`);
+  }, [activeView, persistView, showToast]);
+
+  const handleUpdateNodeStatus = useCallback(
+    async (nodeId: string, status: DesignNode["status"]) => {
+      if (!activeView) return;
+      await persistView({
+        ...activeView,
+        nodes: activeView.nodes.map((n) =>
+          n.id === nodeId ? { ...n, status } : n,
+        ),
+      });
+      showToast(`Marked status as ${status}`);
+    },
+    [activeView, persistView, showToast],
+  );
+
+  const handleToggleWorkspaceTab = useCallback(
+    (tab: WorkspaceDrawerTab) => {
+      if (!canTriggerToggle(`workspace:${tab}`)) return;
+      if (drawerMode === "workspace" && workspaceTab === tab) {
+        setDrawerMode("none");
+        return;
+      }
+      selectSingleNode(null);
+      setDrawerMode("workspace");
+      setWorkspaceTab(tab);
+    },
+    [canTriggerToggle, drawerMode, selectSingleNode, workspaceTab],
+  );
+
+  const handleSelectFilter = useCallback(
+    (next: TriageFilter) => {
+      if (!canTriggerToggle(`filter:${next}`)) return;
+      setFilter((curr) => (next !== "all" && curr === next ? "all" : next));
+    },
+    [canTriggerToggle],
+  );
+
+  const handleToggleNodeThreads = useCallback(
+    (nodeId: string) => {
+      if (!canTriggerToggle(`node-threads:${nodeId}`)) return;
+      if (
+        drawerMode === "node" &&
+        selectedNodeId === nodeId &&
+        elementTab === "threads"
+      ) {
+        setDrawerMode("none");
+        return;
+      }
+      handleOpenNodeThreads(nodeId);
+    },
+    [
+      canTriggerToggle,
+      drawerMode,
+      elementTab,
+      handleOpenNodeThreads,
+      selectedNodeId,
+    ],
+  );
+
+  const handleAddBoxAtCursor = useCallback(async () => {
+    if (!activeViewRef.current) return;
+    const container = canvasContainerRef.current;
+    const cursor = lastCursorRef.current;
+    if (container && cursor) {
+      const rect = container.getBoundingClientRect();
+      if (
+        cursor.x >= rect.left &&
+        cursor.x <= rect.right &&
+        cursor.y >= rect.top &&
+        cursor.y <= rect.bottom
+      ) {
+        await createBoxAtPosition(screenToFlowPosition(cursor));
+        return;
+      }
+    }
+    await createBoxAtPosition();
+  }, [createBoxAtPosition, screenToFlowPosition]);
+
   const {
     contextMenu,
     contextMenuData,
@@ -336,6 +528,11 @@ function WorkbenchInner() {
     handleEdgeContextMenu,
   } = useCanvasContextMenu({
     activeView,
+    filter,
+    viewDiff,
+    viewBaseline,
+    editedNodeIds,
+    editedEdgeIds,
     positionsRef,
     edgeRoutesRef,
     undoMapRef,
@@ -358,6 +555,11 @@ function WorkbenchInner() {
     handleToggleDirection,
     handleUndo,
     handleRedo,
+    handleRevertNode,
+    handleRevertEdge,
+    handleRevertViewToBaseline,
+    handleUnlockAllInView,
+    handleUpdateNodeStatus,
     handleToggleLock,
     handleInlineAddItem,
     handleInlineAddField,
@@ -612,6 +814,8 @@ function WorkbenchInner() {
     handleSelectView,
     handleUndo,
     handleRedo,
+    handleAutoLayout,
+    handleAddBoxAtCursor,
     startArrowPan,
     stopArrowPan,
     updateArrowShift,
@@ -633,8 +837,6 @@ function WorkbenchInner() {
   });
 
   // Sync DesignView -> React Flow nodes
-  const editedNodeIds = useMemo(() => getModifiedNodeIds(viewDiff), [viewDiff]);
-
   useEffect(() => {
     if (!activeView) {
       lastSyncedNodesViewIdRef.current = null;
@@ -661,10 +863,19 @@ function WorkbenchInner() {
         const nodeThreads = viewThreads.filter(
           (t) => t.target_type === "node" && t.target_id === node.id,
         );
-        const waitingOnHumanCount = nodeThreads.filter(
-          isThreadWaitingOnHuman,
-        ).length;
+        const waitingThreads = nodeThreads.filter(isThreadWaitingOnHuman);
+        const waitingOnHumanCount = waitingThreads.length;
+        const latestQuestionPreview =
+          waitingThreads[0]?.messages[waitingThreads[0].messages.length - 1]
+            ?.body;
         const isEdited = editedNodeIds.has(node.id);
+        const editSummary = isEdited
+          ? summarizeNodeDiff(
+              viewDiff,
+              node.id,
+              activeView.diagram_type ?? "general",
+            )
+          : [];
 
         let matchesFilter = true;
         if (filter === "waiting_on_me") matchesFilter = waitingOnHumanCount > 0;
@@ -689,6 +900,9 @@ function WorkbenchInner() {
             node,
             diagramType: activeView.diagram_type ?? "general",
             isHumanEdited: isEdited,
+            editSummary,
+            activeFilter: filter,
+            latestQuestionPreview,
             waitingOnHumanCount,
             totalOpenThreads: nodeThreads.length,
             dimmed: !matchesFilter,
@@ -700,7 +914,7 @@ function WorkbenchInner() {
             onInlineToggleFieldNullable: handleInlineToggleFieldNullable,
             onInlineUpdateFieldName: handleInlineUpdateFieldName,
             onInlineAddField: handleInlineAddField,
-            onOpenNodeThreads: handleOpenNodeThreads,
+            onOpenNodeThreads: handleToggleNodeThreads,
             onExpandedChange: handleExpandedChange,
           },
         };
@@ -719,11 +933,12 @@ function WorkbenchInner() {
     handleInlineUpdateFieldName,
     handleInlineUpdateItem,
     handleInlineUpdateTitle,
-    handleOpenNodeThreads,
     handleToggleLock,
+    handleToggleNodeThreads,
     layoutVersion,
     pulsingNodeId,
     setRfNodes,
+    viewDiff,
   ]);
 
   // Execute pending viewport fit/restore strictly after StoreUpdater commits updated rfNodes
@@ -811,6 +1026,17 @@ function WorkbenchInner() {
           (edge.source === focusNodeId || edge.target === focusNodeId);
         const softDimmed = focusNodeId !== null && !highlighted;
 
+        const isEditedEdge = editedEdgeIds.has(edge.id);
+        const edgeEditSummary = isEditedEdge
+          ? summarizeEdgeDiff(viewDiff, edge.id)
+          : [];
+        const edgeDimmed =
+          filter === "my_edits"
+            ? !isEditedEdge &&
+              dimmedNodeIds.has(edge.source) &&
+              dimmedNodeIds.has(edge.target)
+            : dimmedNodeIds.has(edge.source) && dimmedNodeIds.has(edge.target);
+
         return {
           ...(existing ?? {}),
           id: edge.id,
@@ -824,10 +1050,12 @@ function WorkbenchInner() {
           data: {
             edge,
             diagramType,
-            dimmed:
-              dimmedNodeIds.has(edge.source) && dimmedNodeIds.has(edge.target),
+            dimmed: edgeDimmed,
             highlighted,
             softDimmed,
+            isHumanEdited: isEditedEdge,
+            showEditedBadge: filter === "my_edits",
+            editSummary: edgeEditSummary,
             sourcePortOffset: route?.sourcePortOffset ?? 0,
             targetPortOffset: route?.targetPortOffset ?? 0,
             manualWaypoints: route?.manualWaypoints ?? [],
@@ -841,12 +1069,14 @@ function WorkbenchInner() {
   }, [
     activeView,
     allThreads,
+    editedEdgeIds,
     editedNodeIds,
     filter,
     handleCommitWaypoints,
     layoutVersion,
     routingTick,
     setRfEdges,
+    viewDiff,
   ]);
 
   // Lightweight hover/selection edge emphasis without recomputing corridor routing
@@ -1048,27 +1278,18 @@ function WorkbenchInner() {
 
       <TriageBar
         filter={filter}
-        onChangeFilter={setFilter}
+        onChangeFilter={handleSelectFilter}
         hasActiveView={Boolean(activeView)}
         onExport={(format) => void handleExportDiagram(format)}
+        activeWorkspaceTab={
+          drawerMode === "workspace" ? workspaceTab : null
+        }
         openQuestionsCount={openQuestionsCount}
         pendingAgentCount={pendingAgentCount}
         decisionsCount={decisionsCount}
-        onOpenQuestions={() => {
-          selectSingleNode(null);
-          setDrawerMode("workspace");
-          setWorkspaceTab("questions");
-        }}
-        onOpenPendingReview={() => {
-          selectSingleNode(null);
-          setDrawerMode("workspace");
-          setWorkspaceTab("pending");
-        }}
-        onOpenDecisions={() => {
-          selectSingleNode(null);
-          setDrawerMode("workspace");
-          setWorkspaceTab("adrs");
-        }}
+        onOpenQuestions={() => handleToggleWorkspaceTab("questions")}
+        onOpenPendingReview={() => handleToggleWorkspaceTab("pending")}
+        onOpenDecisions={() => handleToggleWorkspaceTab("adrs")}
         showOfflineWarning={!wsConnected && (wsEverConnected || wsGraceExpired)}
       />
 
@@ -1090,9 +1311,82 @@ function WorkbenchInner() {
         </div>
       )}
 
+      {filter === "my_edits" && activeView && (
+        <div
+          data-testid="my-edits-banner"
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-500/35 bg-sky-500/10 px-4 py-1.5 text-xs text-sky-100"
+        >
+          {viewDiff && viewDiff.has_changes ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-sky-300">
+                  Unsynced edits:
+                </span>
+                <span>
+                  {viewDiff.nodes_modified.length} modified ·{" "}
+                  {viewDiff.nodes_added.length} added ·{" "}
+                  {viewDiff.nodes_removed.length} removed ·{" "}
+                  {viewDiff.edges_added.length +
+                    viewDiff.edges_modified.length +
+                    viewDiff.edges_removed.length}{" "}
+                  edge changes
+                </span>
+                {viewBaseline &&
+                  viewDiff.nodes_removed.map((rem) => (
+                    <button
+                      key={rem.id}
+                      type="button"
+                      onClick={() => void handleRevertNode(rem.id)}
+                      className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/25"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Restore {rem.title}
+                    </button>
+                  ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    selectSingleNode(null);
+                    setDrawerMode("workspace");
+                    setWorkspaceTab("pending");
+                  }}
+                  className="rounded border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-[11px] text-slate-200 hover:border-sky-500/60"
+                >
+                  Inspect Pending
+                </button>
+                {viewBaseline && (
+                  <button
+                    type="button"
+                    onClick={() => void handleRevertViewToBaseline()}
+                    className="inline-flex items-center gap-1 rounded bg-sky-500/20 border border-sky-500/50 px-2 py-0.5 text-[11px] font-semibold text-sky-200 hover:bg-sky-500/30"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Revert All Edits
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <span className="text-slate-300">
+              No unsynced edits in{" "}
+              <strong className="text-slate-100">{activeView.title}</strong> —
+              matches last agent checkpoint.
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="relative flex flex-1 min-h-0">
         <div
           ref={canvasContainerRef}
+          onMouseMove={(e) => {
+            lastCursorRef.current = { x: e.clientX, y: e.clientY };
+          }}
+          onMouseLeave={() => {
+            lastCursorRef.current = null;
+          }}
           className="relative flex-1 min-w-0 min-h-0"
         >
           {!activeView ? (
@@ -1271,6 +1565,7 @@ function WorkbenchInner() {
           }
           allThreads={allThreads}
           viewDiff={viewDiff}
+          viewBaseline={viewBaseline}
           pendingFeedback={pendingFeedback}
           status={snapshot?.status ?? null}
           onSaveNode={async (updated) => {
@@ -1302,6 +1597,8 @@ function WorkbenchInner() {
               ),
             });
           }}
+          onRevertNode={handleRevertNode}
+          onRevertView={handleRevertViewToBaseline}
           onSaveEdge={async (updated) => {
             if (!activeView) return;
             await persistView({
